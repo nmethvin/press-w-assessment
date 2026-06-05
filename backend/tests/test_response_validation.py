@@ -6,7 +6,14 @@ from app.agent.graph import (
     structure_response_from_catalog_mentions,
 )
 from app.domain.profile import ProfileUpdate
-from app.domain.responses import AssistantContent, RecipeCandidate, add_fit_follow_up, validate_recipe_candidate
+from app.domain.responses import (
+    AssistantContent,
+    RecipeCandidate,
+    RecipeSuggestion,
+    add_fit_follow_up,
+    render_assistant_content,
+    validate_recipe_candidate,
+)
 from app.storage import get_profile
 from app.storage import init_db, update_profile
 
@@ -254,3 +261,25 @@ def test_invalid_fit_adds_follow_up_question() -> None:
 
     assert "pizza base" in content.follow_up_question
     assert "suggest something similar" in content.follow_up_question
+
+
+def test_hidden_inline_recipe_renders_concise_chat_update() -> None:
+    content = AssistantContent(
+        response_type="recipe",
+        intro="Dice the chicken before it goes into the pan. I updated the active recipe.",
+        recipes=[
+            RecipeSuggestion(
+                title="Pizza-Inspired Skillet Dish",
+                ingredients=["chicken", "tomatoes", "parmesan"],
+                steps=["Dice the chicken.", "Cook the chicken.", "Add tomatoes."],
+                required_equipment=["pan"],
+                can_make=True,
+            )
+        ],
+        display_recipe_inline=False,
+    )
+
+    rendered = render_assistant_content(content)
+
+    assert "Dice the chicken before it goes into the pan" in rendered
+    assert "### Pizza-Inspired Skillet Dish" not in rendered

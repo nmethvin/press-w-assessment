@@ -14,6 +14,7 @@ from app.domain.recipes import check_recipe_fit
 from app.domain.responses import (
     AssistantContent,
     RecipeCandidate,
+    RecipeRevision,
     RecipeSuggestion,
     add_fit_follow_up,
     build_recipe_suggestion,
@@ -74,7 +75,40 @@ def _load_model(model_name: str):
     return None
 
 
-def route_model(message: str, policy: str) -> Dict[str, str]:
+RECIPE_EDIT_TERMS = {
+    "add",
+    "after",
+    "before",
+    "change",
+    "chop",
+    "cook",
+    "dice",
+    "diced",
+    "dicing",
+    "how long",
+    "instead",
+    "modify",
+    "remove",
+    "replace",
+    "slice",
+    "substitute",
+    "thin",
+    "uncooked",
+    "update",
+    "when",
+}
+
+
+def is_active_recipe_edit(message: str, active_recipe: Optional[Dict[str, Any]]) -> bool:
+    if not active_recipe or not active_recipe.get("recipes"):
+        return False
+    text = message.lower()
+    if any(term in text for term in RECIPE_EDIT_TERMS):
+        return True
+    return bool(re.search(r"\b(my|the|this|that)\b.+\b(recipe|step|ingredient|chicken|tomato|tomatoes|sauce|cheese)\b", text))
+
+
+def route_model(message: str, policy: str, active_recipe: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     """Choose a model tier based on request complexity and safety policy."""
     fast_model = os.getenv(FAST_MODEL_ENV) or os.getenv("OPENAI_MODEL") or DEFAULT_FAST_MODEL
     smart_model = os.getenv(SMART_MODEL_ENV) or DEFAULT_SMART_MODEL
@@ -87,6 +121,13 @@ def route_model(message: str, policy: str) -> Dict[str, str]:
         }
 
     text = message.lower()
+    if is_active_recipe_edit(message, active_recipe):
+        return {
+            "tier": "smart",
+            "model": smart_model,
+            "reason": "active recipe revision or technique follow-up",
+        }
+
     if any(term in text for term in SMART_TERMS) or len(message.split()) >= 28:
         return {
             "tier": "smart",
@@ -124,7 +165,7 @@ class PantryPalAgent:
     ) -> Dict[str, Any]:
         refusal = refusal_for_policy(policy)
         trace: List[Dict[str, Any]] = []
-        routing = route_model(message, policy)
+        routing = route_model(message, policy, active_recipe)
         trace.append({"router": routing})
 
         if policy == "food_safety":
@@ -163,6 +204,12 @@ class PantryPalAgent:
                 "model_tier": routing["tier"],
                 "routing_reason": routing["reason"],
             }
+
+        if is_active_recipe_edit(message, active_recipe):
+            revision_result = self._revise_active_recipe(message, user_id, routing)
+            if revision_result:
+                revision_result["trace"] = trace + revision_result.get("trace", [])
+                return revision_result
 
         graph = self.smart_graph if routing["tier"] == "smart" else self.fast_graph
         if graph:
@@ -253,6 +300,82 @@ class PantryPalAgent:
         ]
         intro = "I checked that proposed recipe against your saved pantry and equipment."
         return AssistantContent(response_type="recipe", intro=intro, recipes=[suggestion]), trace
+
+    def _revise_active_recipe(
+        self,
+        message: str,
+        user_id: str,
+        routing: Dict[str, str],
+    ) -> Optional[Dict[str, Any]]:
+        model = self.smart_model or self.fast_model
+        active_recipe = storage.get_active_recipe(user_id)
+        if not model or not active_recipe or not active_recipe.get("recipes"):
+            return None
+
+        profile = storage.get_profile(user_id)
+        formatter = model.with_structured_output(RecipeRevision, method="function_calling")
+        prompt = (
+            "Revise the active recipe in response to the user's latest cooking question or correction. "
+            "Return the full updated recipe candidate, not a partial diff. Preserve the recipe title, ingredients, "
+            "equipment, and steps unless the user explicitly changes them or a step must be clarified. Make the "
+            "steps complete, concrete, and in cooking order, including prep steps such as dicing before they are used. "
+            "Use exact saved pantry and equipment terms where possible. The revision_summary should be a concise "
+            "answer to the user's question and mention that the active recipe was updated when it changed.\n\n"
+            f"Saved pantry: {profile.pantry}\n"
+            f"Saved equipment: {profile.equipment}\n\n"
+            f"Active recipe JSON: {active_recipe}\n\n"
+            f"User message: {message}"
+        )
+        try:
+            revision = formatter.invoke(prompt)
+        except Exception as exc:
+            return {
+                "message": (
+                    "I can answer that in context, but I could not safely update the pinned recipe this turn. "
+                    "Tell me the exact change you want and I will revise it."
+                ),
+                "content": AssistantContent(
+                    response_type="general",
+                    intro=(
+                        "I can answer that in context, but I could not safely update the pinned recipe this turn. "
+                        "Tell me the exact change you want and I will revise it."
+                    ),
+                ).model_dump(),
+                "trace": [{"validator": "active_recipe_revision", "error": str(exc)}],
+                "policy": "food",
+                "model": routing["model"],
+                "model_tier": routing["tier"],
+                "routing_reason": routing["reason"],
+            }
+
+        suggestion = validate_recipe_candidate(revision.candidate, profile)
+        structured_content = add_fit_follow_up(
+            AssistantContent(
+                response_type="recipe",
+                intro=revision.revision_summary,
+                recipes=[suggestion],
+                display_recipe_inline=False,
+            )
+        )
+        rendered_content = render_assistant_content(structured_content)
+        trace = [
+            {
+                "validator": "active_recipe_revision",
+                "recipe_name": suggestion.title,
+                "can_make": suggestion.can_make,
+                "missing_equipment": suggestion.missing_equipment,
+                "missing_ingredients": suggestion.missing_ingredients,
+            }
+        ]
+        return {
+            "message": ensure_allergen_notice(rendered_content),
+            "content": structured_content.model_dump(),
+            "trace": trace,
+            "policy": "food",
+            "model": routing["model"],
+            "model_tier": routing["tier"],
+            "routing_reason": routing["reason"],
+        }
 
     def _offline_agent(
         self,

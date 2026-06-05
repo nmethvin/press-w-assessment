@@ -127,7 +127,9 @@ function renderStructuredContent(content) {
     parts.push(`<p>${formatInlineMarkdown(content.intro)}</p>`);
   }
   for (const recipe of content.recipes || []) {
-    parts.push(renderRecipeCard(recipe));
+    if (content.display_recipe_inline !== false) {
+      parts.push(renderRecipeCard(recipe));
+    }
   }
   if (content.safety_notes?.length) {
     parts.push(`<h4>Notes</h4><ul>${content.safety_notes.map((note) => `<li>${formatInlineMarkdown(note)}</li>`).join("")}</ul>`);
@@ -255,7 +257,8 @@ form.addEventListener("submit", async (event) => {
     });
     const result = await response.json();
     status.textContent = `Policy: ${result.policy}. Mode: ${result.mode}. Model: ${result.model_tier} (${result.model}).`;
-    appendMessage(result.content || result.message, "assistant");
+    const chatContent = result.content?.display_recipe_inline === false ? result.message : result.content || result.message;
+    appendMessage(chatContent, "assistant");
     renderActiveRecipe(result.active_recipe || result.content);
     appendTrace(result.trace);
     await loadProfile();

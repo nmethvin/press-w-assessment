@@ -29,6 +29,7 @@ class AssistantContent(BaseModel):
     safety_notes: list[str] = Field(default_factory=list)
     follow_up_question: str = ""
     allergen_notice: str = ALLERGEN_NOTICE
+    display_recipe_inline: bool = True
 
 
 class RecipeCandidate(BaseModel):
@@ -37,6 +38,11 @@ class RecipeCandidate(BaseModel):
     ingredients: list[str] = Field(default_factory=list)
     steps: list[str] = Field(default_factory=list)
     required_equipment: list[str] = Field(default_factory=list)
+
+
+class RecipeRevision(BaseModel):
+    revision_summary: str
+    candidate: RecipeCandidate
 
 
 def build_recipe_suggestion(recipe: Recipe, profile: UserProfile) -> RecipeSuggestion:
@@ -83,8 +89,9 @@ def validate_recipe_candidate(candidate: RecipeCandidate, profile: UserProfile) 
 
 def render_assistant_content(content: AssistantContent) -> str:
     parts = [content.intro]
-    for recipe in content.recipes:
-        parts.append(render_recipe_suggestion(recipe))
+    if content.display_recipe_inline:
+        for recipe in content.recipes:
+            parts.append(render_recipe_suggestion(recipe))
     if content.safety_notes:
         parts.append("### Notes\n" + "\n".join(f"- {note}" for note in content.safety_notes))
     if content.follow_up_question:
