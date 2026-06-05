@@ -106,15 +106,18 @@ class PantryPalAgent:
             )
         else:
             similar_text = ""
+            workaround_text = ""
             if "oven" in fit.get("missing_equipment", []) and "chicken" in message.lower():
                 alt = search_recipe_catalog.invoke({"query": "skillet chicken", "tags": ["stovetop"], "limit": 1})
                 trace.append({"tool": "search_recipe_catalog", "input": {"query": "skillet chicken"}, "output": alt})
                 if alt:
                     similar_text = f" A better fit is {alt[0]['name']}, which keeps the chicken-dinner idea on the stovetop."
+            if fit.get("workarounds"):
+                workaround_text = f" Workaround: {fit['workarounds'][0]}"
             answer = (
                 f"I would not make {chosen['name']} as written: you are missing "
                 f"{', '.join(fit.get('missing_equipment') or fit.get('missing_ingredients') or ['a requirement'])}."
-                f"{similar_text} I can help adapt it instead of leaving you with a dead end."
+                f"{similar_text}{workaround_text} I can help adapt it instead of leaving you with a dead end."
             )
 
         return {"message": ensure_allergen_notice(answer), "trace": trace, "policy": policy, "mode": "offline_fallback"}

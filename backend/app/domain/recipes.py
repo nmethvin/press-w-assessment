@@ -97,6 +97,40 @@ SEED_RECIPES: list[Recipe] = [
         substitutions={"rice": "cauliflower rice or greens", "coconut milk": "cream plus water"},
     ),
     Recipe(
+        id="chicken-potato-stew",
+        name="Chicken Potato Stew",
+        summary="A cozy stovetop stew with chicken, potatoes, carrots, and herbs.",
+        ingredients=["chicken", "potatoes", "carrots", "olive oil", "herbs"],
+        required_equipment=["stovetop", "pot", "knife"],
+        optional_equipment=["thermometer"],
+        tags=["chicken", "stew", "soup", "stovetop", "dinner"],
+        time_minutes=45,
+        steps=[
+            "Brown chicken pieces in olive oil.",
+            "Add chopped potatoes, carrots, herbs, salt, and enough water or stock to cover.",
+            "Simmer until the vegetables are tender and the chicken is cooked through.",
+            "Mash a few potatoes into the broth if you want it thicker.",
+        ],
+        substitutions={"potatoes": "white beans or sweet potatoes", "carrots": "celery or onion"},
+    ),
+    Recipe(
+        id="tomato-garlic-soup",
+        name="Tomato Garlic Soup",
+        summary="A simple stovetop soup that turns tomatoes and garlic into dinner.",
+        ingredients=["tomatoes", "garlic", "olive oil", "bread"],
+        required_equipment=["stovetop", "pot", "knife"],
+        optional_equipment=["blender"],
+        tags=["vegetarian", "soup", "stovetop", "fast"],
+        time_minutes=30,
+        steps=[
+            "Cook sliced garlic in olive oil until fragrant.",
+            "Add tomatoes, salt, and water or stock, then simmer until saucy.",
+            "Mash with a spoon for texture, or blend if you have a blender.",
+            "Serve with toasted bread.",
+        ],
+        substitutions={"bread": "crackers, rice, or pasta", "tomatoes": "jarred marinara plus water"},
+    ),
+    Recipe(
         id="blender-smoothie",
         name="Berry Blender Smoothie",
         summary="A quick smoothie that requires a blender.",
@@ -198,4 +232,6 @@ def build_workarounds(recipe: Recipe, missing_equipment: list[str]) -> list[str]
         workarounds.append("Choose a no-blender breakfast, or mash soft fruit into yogurt by hand.")
     if "sheet pan" in missing:
         workarounds.append("Use an oven-safe skillet or roasting dish if you have one.")
+    if "pot" in missing:
+        workarounds.append("Use the deepest pan you have, reduce the liquid, and simmer covered like a braise.")
     return workarounds

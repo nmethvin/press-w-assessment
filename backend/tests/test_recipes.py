@@ -37,3 +37,22 @@ def test_recipe_search_prioritizes_direct_recipe_intent_over_preferences() -> No
     )
 
     assert results[0].id == "sheet-pan-roasted-chicken"
+
+
+def test_soup_or_stew_search_returns_soup_or_stew() -> None:
+    results = search_recipes(SEED_RECIPES, "i want some sort of soup or stew", tags=["fast", "stovetop"])
+
+    assert results[0].id in {"chicken-potato-stew", "tomato-garlic-soup"}
+
+
+def test_missing_pot_has_workaround() -> None:
+    recipe = next(item for item in SEED_RECIPES if item.id == "chicken-potato-stew")
+
+    result = check_recipe_fit(
+        recipe,
+        pantry=["chicken", "potatoes", "carrots", "olive oil", "herbs"],
+        equipment=["stovetop", "pan", "knife"],
+    )
+
+    assert "pot" in result.missing_equipment
+    assert result.workarounds
