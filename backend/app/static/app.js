@@ -265,7 +265,11 @@ form.addEventListener("submit", async (event) => {
     status.textContent = `Policy: ${result.policy}. Mode: ${result.mode}. Model: ${result.model_tier} (${result.model}).`;
     const chatContent = result.content?.display_recipe_inline === false ? result.message : result.content || result.message;
     appendMessage(chatContent, "assistant");
-    renderActiveRecipe(result.active_recipe || result.content);
+    if (result.active_recipe) {
+      renderActiveRecipe(result.active_recipe);
+    } else if (result.content?.recipes?.length) {
+      renderActiveRecipe(result.content);
+    }
     appendTrace(result.trace);
     await loadProfile();
   } catch (error) {

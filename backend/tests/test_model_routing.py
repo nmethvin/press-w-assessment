@@ -40,4 +40,5 @@ def test_active_recipe_edit_detection_requires_active_recipe() -> None:
     active_recipe = {"recipes": [{"title": "Pizza-Inspired Skillet Dish"}]}
 
     assert is_active_recipe_edit("wait when do i dice the chicken?", active_recipe)
+    assert is_active_recipe_edit("how will i know the chicken is done?", active_recipe)
     assert not is_active_recipe_edit("wait when do i dice the chicken?", None)

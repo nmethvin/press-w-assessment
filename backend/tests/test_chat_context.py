@@ -40,3 +40,16 @@ def test_session_reset_clears_chat_and_active_recipe() -> None:
     assert reset == {"status": "reset"}
     assert active is None
     assert follow_up["policy"] == "off_topic"
+
+
+def test_general_follow_up_preserves_active_recipe() -> None:
+    user_id = "preserve-active-recipe-test"
+    client = TestClient(app)
+
+    first = client.post("/api/chat", json={"user_id": user_id, "message": "suggest chicken potato stew"}).json()
+    second = client.post("/api/chat", json={"user_id": user_id, "message": "how will i know the chicken is done?"}).json()
+
+    assert first["active_recipe"] is not None
+    assert second["policy"] == "food"
+    assert second["active_recipe"] is not None
+    assert second["active_recipe"]["recipes"][0]["title"] == "Chicken Potato Stew"
