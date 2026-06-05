@@ -21,6 +21,10 @@ def test_dicing_tomatoes_question_is_food() -> None:
     assert classify_message("how thin do i dice the tomatoes?") == "food"
 
 
+def test_smoking_oil_while_cooking_is_food() -> None:
+    assert classify_message("ok im currently in the middle of cooking. my olive oil is smoking, what should i do?") == "food"
+
+
 def test_follow_up_uses_recent_food_context() -> None:
     recent = [{"role": "user", "content": "i want to make a stew"}]
 
