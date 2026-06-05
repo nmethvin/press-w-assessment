@@ -60,6 +60,20 @@ FOOD_SCOPE_TERMS = {
     "mozzarella",
     "basil",
     "toppings",
+    "dice",
+    "diced",
+    "chop",
+    "chopped",
+    "slice",
+    "sliced",
+    "thin",
+    "thick",
+    "salt",
+    "pepper",
+    "simmer",
+    "saute",
+    "sauté",
+    "pan",
 }
 
 MEDICAL_TERMS = {

@@ -51,6 +51,15 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS active_recipes (
+                user_id TEXT PRIMARY KEY,
+                payload TEXT NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         for recipe in SEED_RECIPES:
             conn.execute(
                 "INSERT OR IGNORE INTO recipes (id, payload) VALUES (?, ?)",
@@ -148,3 +157,25 @@ def get_recent_conversation(user_id: str, limit: int = 8) -> list[dict[str, str]
             (user_id, limit),
         ).fetchall()
     return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+
+
+def save_active_recipe(user_id: str, payload: dict) -> dict:
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO active_recipes (user_id, payload, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id) DO UPDATE SET
+                payload = excluded.payload,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (user_id, json.dumps(payload)),
+        )
+        conn.commit()
+    return payload
+
+
+def get_active_recipe(user_id: str) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute("SELECT payload FROM active_recipes WHERE user_id = ?", (user_id,)).fetchone()
+    return json.loads(row["payload"]) if row else None

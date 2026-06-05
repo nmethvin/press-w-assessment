@@ -17,6 +17,10 @@ def test_pizza_request_is_food() -> None:
     assert classify_message("i want to make a pizza") == "food"
 
 
+def test_dicing_tomatoes_question_is_food() -> None:
+    assert classify_message("how thin do i dice the tomatoes?") == "food"
+
+
 def test_follow_up_uses_recent_food_context() -> None:
     recent = [{"role": "user", "content": "i want to make a stew"}]
 

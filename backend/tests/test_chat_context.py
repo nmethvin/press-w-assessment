@@ -13,3 +13,14 @@ def test_chat_endpoint_follows_food_context() -> None:
     assert first["policy"] == "food"
     assert second["policy"] == "food"
     assert "off-topic" not in second["message"].lower()
+
+
+def test_chat_endpoint_returns_active_recipe() -> None:
+    user_id = "active-recipe-test"
+    client = TestClient(app)
+
+    response = client.post("/api/chat", json={"user_id": user_id, "message": "suggest chicken potato stew"}).json()
+    active = client.get(f"/api/active-recipe/{user_id}").json()["active_recipe"]
+
+    assert response["active_recipe"] is not None
+    assert active["recipes"][0]["title"] == "Chicken Potato Stew"

@@ -23,6 +23,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     content: Optional[Dict[str, Any]] = None
+    active_recipe: Optional[Dict[str, Any]] = None
     policy: str
     trace: List[Dict[str, Any]]
     mode: str = "langgraph"
@@ -65,19 +66,29 @@ def put_profile(user_id: str, update: ProfileUpdate) -> UserProfile:
     return storage.update_profile(user_id, update)
 
 
+@app.get("/api/active-recipe/{user_id}")
+def get_active_recipe(user_id: str) -> Dict[str, Any]:
+    return {"active_recipe": storage.get_active_recipe(user_id)}
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
     recent_messages = storage.get_recent_conversation(request.user_id)
-    policy = classify_message(request.message, recent_messages)
+    active_recipe = storage.get_active_recipe(request.user_id)
+    active_context = recent_messages + ([{"role": "assistant", "content": str(active_recipe)}] if active_recipe else [])
+    policy = classify_message(request.message, active_context)
     storage.add_conversation_message(request.user_id, "user", request.message)
-    result = agent.invoke(request.message, request.user_id, policy, recent_messages)
+    result = agent.invoke(request.message, request.user_id, policy, recent_messages, active_recipe)
     message = result["message"]
     if result.get("policy", policy) == "food":
         message = ensure_allergen_notice(message)
+    if result.get("content", {}).get("recipes"):
+        active_recipe = storage.save_active_recipe(request.user_id, result["content"])
     storage.add_conversation_message(request.user_id, "assistant", message)
     return ChatResponse(
         message=message,
         content=result.get("content"),
+        active_recipe=active_recipe,
         policy=result.get("policy", policy),
         trace=result.get("trace", []),
         mode=result.get("mode", "langgraph"),

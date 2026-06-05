@@ -120,6 +120,7 @@ class PantryPalAgent:
         user_id: str,
         policy: str,
         recent_messages: Optional[List[Dict[str, str]]] = None,
+        active_recipe: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         refusal = refusal_for_policy(policy)
         trace: List[Dict[str, Any]] = []
@@ -170,6 +171,7 @@ class PantryPalAgent:
                 {
                     "messages": [
                         SystemMessage(content=f"Current user_id is {user_id}."),
+                        SystemMessage(content=_active_recipe_context(active_recipe)),
                         *history_messages,
                         HumanMessage(content=message),
                     ]
@@ -211,7 +213,7 @@ class PantryPalAgent:
                 "routing_reason": routing["reason"],
             }
 
-        return self._offline_agent(message, user_id, policy, routing, recent_messages or [])
+        return self._offline_agent(message, user_id, policy, routing, recent_messages or [], active_recipe)
 
     def _structure_non_catalog_recipe(
         self,
@@ -259,13 +261,14 @@ class PantryPalAgent:
         policy: str,
         routing: Dict[str, str],
         recent_messages: List[Dict[str, str]],
+        active_recipe: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """Deterministic fallback for local demos without an LLM key."""
         trace: List[Dict[str, Any]] = [{"router": routing}]
         profile = get_user_profile.invoke({"user_id": user_id})
         trace.append({"tool": "get_user_profile", "input": {"user_id": user_id}, "output": profile})
 
-        recipe_query = _resolve_follow_up_query(message, recent_messages)
+        recipe_query = _resolve_follow_up_query(message, recent_messages, active_recipe)
         recipes = search_recipe_catalog.invoke({"query": recipe_query, "tags": profile.get("preferences", []), "limit": 3})
         trace.append({"tool": "search_recipe_catalog", "input": {"query": recipe_query}, "output": recipes})
 
@@ -357,14 +360,35 @@ def _to_langchain_history(recent_messages: List[Dict[str, str]]) -> List[BaseMes
     return history
 
 
-def _resolve_follow_up_query(message: str, recent_messages: List[Dict[str, str]]) -> str:
+def _resolve_follow_up_query(
+    message: str,
+    recent_messages: List[Dict[str, str]],
+    active_recipe: Optional[Dict[str, Any]] = None,
+) -> str:
     text = message.lower().strip()
+    if active_recipe and len(message.split()) <= 10:
+        title = ""
+        recipes = active_recipe.get("recipes") or []
+        if recipes:
+            title = recipes[0].get("title", "")
+        if title:
+            return f"{title} {message}"
     if text not in {"suggest one", "recommend one", "pick one", "yes", "sure", "please"}:
         return message
     for item in reversed(recent_messages):
         if item["role"] == "user":
             return f"{item['content']} {message}"
     return message
+
+
+def _active_recipe_context(active_recipe: Optional[Dict[str, Any]]) -> str:
+    if not active_recipe:
+        return "No active recipe is currently pinned."
+    return (
+        "Active recipe context is pinned for this conversation. Answer cooking technique questions against this "
+        "recipe unless the user asks to replace it. Active recipe JSON: "
+        f"{active_recipe}"
+    )
 
 
 def enforce_recipe_fit_for_response(content: str, user_id: str) -> tuple[str, List[Dict[str, Any]]]:

@@ -10,6 +10,8 @@ const messages = document.querySelector("#messages");
 const form = document.querySelector("#chatForm");
 const input = document.querySelector("#messageInput");
 const traceToggle = document.querySelector("#traceToggle");
+const activeRecipePanel = document.querySelector("#activeRecipePanel");
+const activeRecipeSidebar = document.querySelector("#activeRecipeSidebar");
 
 function listFromField(value) {
   return value
@@ -185,6 +187,17 @@ function appendTrace(trace) {
   messages.scrollTop = messages.scrollHeight;
 }
 
+function renderActiveRecipe(content) {
+  if (!content?.recipes?.length) {
+    activeRecipePanel.innerHTML = "Recipe cards will pin here as you work.";
+    activeRecipeSidebar.textContent = "No active recipe yet.";
+    return;
+  }
+  const recipeHtml = content.recipes.map(renderRecipeCard).join("");
+  activeRecipePanel.innerHTML = recipeHtml;
+  activeRecipeSidebar.innerHTML = recipeHtml;
+}
+
 async function loadProfile() {
   const response = await fetch(`/api/profile/${userId}`);
   const profile = await response.json();
@@ -193,6 +206,21 @@ async function loadProfile() {
   fields.preferences.value = fieldFromList(profile.preferences);
   fields.allergies.value = fieldFromList(profile.allergies);
 }
+
+async function loadActiveRecipe() {
+  const response = await fetch(`/api/active-recipe/${userId}`);
+  const payload = await response.json();
+  renderActiveRecipe(payload.active_recipe);
+}
+
+document.querySelectorAll(".tab-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    document.querySelector(`#${button.dataset.tab}Tab`).classList.add("active");
+  });
+});
 
 async function saveProfile() {
   const payload = {
@@ -228,6 +256,7 @@ form.addEventListener("submit", async (event) => {
     const result = await response.json();
     status.textContent = `Policy: ${result.policy}. Mode: ${result.mode}. Model: ${result.model_tier} (${result.model}).`;
     appendMessage(result.content || result.message, "assistant");
+    renderActiveRecipe(result.active_recipe || result.content);
     appendTrace(result.trace);
     await loadProfile();
   } catch (error) {
@@ -241,3 +270,4 @@ appendMessage(
   "assistant",
 );
 loadProfile();
+loadActiveRecipe();

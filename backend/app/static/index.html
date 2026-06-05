@@ -10,54 +10,72 @@
     <main class="app-shell">
       <aside class="profile-panel">
         <div>
-          <p class="eyebrow">Household Memory</p>
+          <p class="eyebrow">Workspace</p>
           <h1>PantryPal</h1>
         </div>
 
-        <label>
-          Pantry
-          <textarea id="pantry" rows="5"></textarea>
-        </label>
-        <label>
-          Equipment
-          <textarea id="equipment" rows="4"></textarea>
-        </label>
-        <label>
-          Preferences
-          <textarea id="preferences" rows="3"></textarea>
-        </label>
-        <label>
-          Allergies
-          <textarea id="allergies" rows="3"></textarea>
-        </label>
-        <button id="saveProfile">Save Memory</button>
-        <p class="legal-note">
-          Allergen note is enforced for recipe and ingredient suggestions. Medical nutrition and specific food-safety determinations are out of scope.
-        </p>
+        <div class="tabs">
+          <button class="tab-button active" data-tab="memory" type="button">Memory</button>
+          <button class="tab-button" data-tab="recipe" type="button">Recipe</button>
+        </div>
+
+        <div id="memoryTab" class="tab-content active">
+          <label>
+            Pantry
+            <textarea id="pantry" rows="5"></textarea>
+          </label>
+          <label>
+            Equipment
+            <textarea id="equipment" rows="4"></textarea>
+          </label>
+          <label>
+            Preferences
+            <textarea id="preferences" rows="3"></textarea>
+          </label>
+          <label>
+            Allergies
+            <textarea id="allergies" rows="3"></textarea>
+          </label>
+          <button id="saveProfile">Save Memory</button>
+          <p class="legal-note">
+            Allergen note is enforced for recipe and ingredient suggestions. Medical nutrition and specific food-safety determinations are out of scope.
+          </p>
+        </div>
+
+        <div id="recipeTab" class="tab-content">
+          <div id="activeRecipeSidebar" class="active-recipe-mini">No active recipe yet.</div>
+        </div>
       </aside>
 
-      <section class="chat-panel">
-        <header class="chat-header">
-          <div>
-            <p class="eyebrow">Cooking Assistant</p>
-            <h2>The friend who actually checks your kitchen first.</h2>
-          </div>
-          <label class="trace-toggle">
-            <input id="traceToggle" type="checkbox" />
-            Engineer trace
-          </label>
-        </header>
+      <section class="workbench">
+        <section class="chat-panel">
+          <header class="chat-header">
+            <div>
+              <p class="eyebrow">Cooking Assistant</p>
+              <h2>The friend who actually checks your kitchen first.</h2>
+            </div>
+            <label class="trace-toggle">
+              <input id="traceToggle" type="checkbox" />
+              Engineer trace
+            </label>
+          </header>
 
-        <div id="messages" class="messages"></div>
+          <div id="messages" class="messages"></div>
 
-        <form id="chatForm" class="composer">
-          <input
-            id="messageInput"
-            autocomplete="off"
-            placeholder="Ask what to make with what you have..."
-          />
-          <button type="submit">Send</button>
-        </form>
+          <form id="chatForm" class="composer">
+            <input
+              id="messageInput"
+              autocomplete="off"
+              placeholder="Ask about the active recipe or what to make..."
+            />
+            <button type="submit">Send</button>
+          </form>
+        </section>
+
+        <aside class="recipe-panel">
+          <p class="eyebrow">Active Recipe</p>
+          <div id="activeRecipePanel" class="active-recipe-empty">Recipe cards will pin here as you work.</div>
+        </aside>
       </section>
     </main>
     <script src="/assets/app.js"></script>
