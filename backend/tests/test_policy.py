@@ -13,6 +13,16 @@ def test_soup_or_stew_request_is_food() -> None:
     assert classify_message("i want some sort of soup or stew") == "food"
 
 
+def test_follow_up_uses_recent_food_context() -> None:
+    recent = [{"role": "user", "content": "i want to make a stew"}]
+
+    assert classify_message("suggest one", recent) == "food"
+
+
+def test_follow_up_without_food_context_stays_off_topic() -> None:
+    assert classify_message("suggest one", []) == "off_topic"
+
+
 def test_allergen_notice_is_added_once() -> None:
     first = ensure_allergen_notice("Make a pasta recipe with tomatoes.")
     second = ensure_allergen_notice(first)

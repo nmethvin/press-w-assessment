@@ -79,17 +79,43 @@ FOOD_SAFETY_TERMS = {
     "smells bad",
 }
 
+FOLLOW_UP_TERMS = {
+    "one",
+    "that",
+    "those",
+    "it",
+    "yes",
+    "yeah",
+    "yep",
+    "sure",
+    "please",
+    "suggest",
+    "recommend",
+    "pick",
+    "make",
+}
 
-def classify_message(message: str) -> str:
+
+def classify_message(message: str, recent_messages: Optional[list[dict[str, str]]] = None) -> str:
     text = message.lower()
     if any(term in text for term in FOOD_SAFETY_TERMS):
         return "food_safety"
     if any(term in text for term in MEDICAL_TERMS):
         return "medical"
     tokens = set(text.replace("?", " ").replace(",", " ").split())
+    if _is_food_follow_up(tokens, recent_messages or []):
+        return "food"
     if tokens and not (tokens & FOOD_SCOPE_TERMS):
         return "off_topic"
     return "food"
+
+
+def _is_food_follow_up(tokens: set[str], recent_messages: list[dict[str, str]]) -> bool:
+    if not tokens or not (tokens & FOLLOW_UP_TERMS):
+        return False
+    recent_text = " ".join(message["content"].lower() for message in recent_messages[-4:])
+    recent_tokens = set(recent_text.replace("?", " ").replace(",", " ").split())
+    return bool(recent_tokens & FOOD_SCOPE_TERMS)
 
 
 def needs_allergen_notice(text: str) -> bool:

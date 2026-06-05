@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.prebuilt import create_react_agent
@@ -100,7 +100,13 @@ class PantryPalAgent:
             create_react_agent(self.smart_model, TOOLS, state_modifier=SYSTEM_PROMPT) if self.smart_model else None
         )
 
-    def invoke(self, message: str, user_id: str, policy: str) -> Dict[str, Any]:
+    def invoke(
+        self,
+        message: str,
+        user_id: str,
+        policy: str,
+        recent_messages: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         refusal = refusal_for_policy(policy)
         trace: List[Dict[str, Any]] = []
         routing = route_model(message, policy)
@@ -135,10 +141,12 @@ class PantryPalAgent:
 
         graph = self.smart_graph if routing["tier"] == "smart" else self.fast_graph
         if graph:
+            history_messages = _to_langchain_history(recent_messages or [])
             result = graph.invoke(
                 {
                     "messages": [
                         SystemMessage(content=f"Current user_id is {user_id}."),
+                        *history_messages,
                         HumanMessage(content=message),
                     ]
                 },
@@ -156,16 +164,24 @@ class PantryPalAgent:
                 "routing_reason": routing["reason"],
             }
 
-        return self._offline_agent(message, user_id, policy, routing)
+        return self._offline_agent(message, user_id, policy, routing, recent_messages or [])
 
-    def _offline_agent(self, message: str, user_id: str, policy: str, routing: Dict[str, str]) -> Dict[str, Any]:
+    def _offline_agent(
+        self,
+        message: str,
+        user_id: str,
+        policy: str,
+        routing: Dict[str, str],
+        recent_messages: List[Dict[str, str]],
+    ) -> Dict[str, Any]:
         """Deterministic fallback for local demos without an LLM key."""
         trace: List[Dict[str, Any]] = [{"router": routing}]
         profile = get_user_profile.invoke({"user_id": user_id})
         trace.append({"tool": "get_user_profile", "input": {"user_id": user_id}, "output": profile})
 
-        recipes = search_recipe_catalog.invoke({"query": message, "tags": profile.get("preferences", []), "limit": 3})
-        trace.append({"tool": "search_recipe_catalog", "input": {"query": message}, "output": recipes})
+        recipe_query = _resolve_follow_up_query(message, recent_messages)
+        recipes = search_recipe_catalog.invoke({"query": recipe_query, "tags": profile.get("preferences", []), "limit": 3})
+        trace.append({"tool": "search_recipe_catalog", "input": {"query": recipe_query}, "output": recipes})
 
         if not recipes:
             answer = "I can help with that food question, but I do not have a strong recipe match in the demo catalog yet."
@@ -225,3 +241,23 @@ def _extract_trace(messages: list[BaseMessage]) -> List[Dict[str, Any]]:
         elif isinstance(message, ToolMessage):
             trace.append({"tool_result": message.name, "output": message.content, "id": message.tool_call_id})
     return trace
+
+
+def _to_langchain_history(recent_messages: List[Dict[str, str]]) -> List[BaseMessage]:
+    history: List[BaseMessage] = []
+    for item in recent_messages[-6:]:
+        if item["role"] == "user":
+            history.append(HumanMessage(content=item["content"]))
+        elif item["role"] == "assistant":
+            history.append(AIMessage(content=item["content"]))
+    return history
+
+
+def _resolve_follow_up_query(message: str, recent_messages: List[Dict[str, str]]) -> str:
+    text = message.lower().strip()
+    if text not in {"suggest one", "recommend one", "pick one", "yes", "sure", "please"}:
+        return message
+    for item in reversed(recent_messages):
+        if item["role"] == "user":
+            return f"{item['content']} {message}"
+    return message

@@ -40,6 +40,17 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         for recipe in SEED_RECIPES:
             conn.execute(
                 "INSERT OR IGNORE INTO recipes (id, payload) VALUES (?, ?)",
@@ -113,3 +124,27 @@ def get_recipe(recipe_id: str) -> Optional[Recipe]:
     with connect() as conn:
         row = conn.execute("SELECT payload FROM recipes WHERE id = ?", (recipe_id,)).fetchone()
     return Recipe(**json.loads(row["payload"])) if row else None
+
+
+def add_conversation_message(user_id: str, role: str, content: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO conversation_messages (user_id, role, content) VALUES (?, ?, ?)",
+            (user_id, role, content),
+        )
+        conn.commit()
+
+
+def get_recent_conversation(user_id: str, limit: int = 8) -> list[dict[str, str]]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT role, content
+            FROM conversation_messages
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+    return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]

@@ -66,11 +66,14 @@ def put_profile(user_id: str, update: ProfileUpdate) -> UserProfile:
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
-    policy = classify_message(request.message)
-    result = agent.invoke(request.message, request.user_id, policy)
+    recent_messages = storage.get_recent_conversation(request.user_id)
+    policy = classify_message(request.message, recent_messages)
+    storage.add_conversation_message(request.user_id, "user", request.message)
+    result = agent.invoke(request.message, request.user_id, policy, recent_messages)
     message = result["message"]
     if result.get("policy", policy) == "food":
         message = ensure_allergen_notice(message)
+    storage.add_conversation_message(request.user_id, "assistant", message)
     return ChatResponse(
         message=message,
         policy=result.get("policy", policy),
