@@ -7,6 +7,8 @@ services:
       PANTRYPAL_MODEL_PROVIDER: ${PANTRYPAL_MODEL_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      PANTRYPAL_FAST_MODEL: ${PANTRYPAL_FAST_MODEL:-gpt-4o-mini}
+      PANTRYPAL_SMART_MODEL: ${PANTRYPAL_SMART_MODEL:-gpt-4o}
     volumes:
       - pantrypal-data:/app/backend/data
 

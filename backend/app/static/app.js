@@ -81,7 +81,7 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({ user_id: userId, message }),
     });
     const result = await response.json();
-    status.textContent = `Policy: ${result.policy}. Mode: ${result.mode}.`;
+    status.textContent = `Policy: ${result.policy}. Mode: ${result.mode}. Model: ${result.model_tier} (${result.model}).`;
     appendMessage(result.message, "assistant");
     appendTrace(result.trace);
     await loadProfile();

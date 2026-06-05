@@ -33,7 +33,8 @@ With an OpenAI key:
 
 ```bash
 export OPENAI_API_KEY=your-key
-export OPENAI_MODEL=gpt-4o-mini
+export PANTRYPAL_FAST_MODEL=gpt-4o-mini
+export PANTRYPAL_SMART_MODEL=gpt-4o
 PYTHONPATH=backend uvicorn app.main:app --reload
 ```
 
@@ -52,6 +53,16 @@ To run the LangGraph/OpenAI path in Docker:
 ```bash
 OPENAI_API_KEY=your-key docker compose up --build
 ```
+
+## Model routing
+
+PantryPal uses a small router before invoking the agent:
+
+- `PANTRYPAL_FAST_MODEL`, default `gpt-4o-mini`, handles ordinary household cooking questions.
+- `PANTRYPAL_SMART_MODEL`, default `gpt-4o`, handles complex planning, dinner-party/menu, wine-pairing, and longer multi-constraint requests.
+- Off-topic, medical, and food-safety policy responses bypass the LLM where deterministic handling is safer and cheaper.
+
+The chat response includes `model`, `model_tier`, and `routing_reason`, and the UI status line shows the selected tier.
 
 ## Example requests
 

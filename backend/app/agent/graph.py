@@ -10,6 +10,28 @@ from app.agent.tools import TOOLS, check_recipe_fit_for_user, external_food_sear
 from app.domain.policy import ensure_allergen_notice, refusal_for_policy
 
 
+FAST_MODEL_ENV = "PANTRYPAL_FAST_MODEL"
+SMART_MODEL_ENV = "PANTRYPAL_SMART_MODEL"
+DEFAULT_FAST_MODEL = "gpt-4o-mini"
+DEFAULT_SMART_MODEL = "gpt-4o"
+SMART_TERMS = {
+    "dinner party",
+    "hosting",
+    "menu",
+    "meal plan",
+    "week",
+    "pairing",
+    "wine",
+    "multi-course",
+    "three course",
+    "3 course",
+    "complex",
+    "compare",
+    "plan",
+    "guests",
+}
+
+
 SYSTEM_PROMPT = """You are PantryPal, a household cooking assistant with a warm, opinionated friend-who-cooks voice.
 
 Scope:
@@ -29,23 +51,60 @@ Allergen consistency:
 """
 
 
-def _load_model():
+def _load_model(model_name: str):
     provider = os.getenv("PANTRYPAL_MODEL_PROVIDER", "openai").lower()
     if provider == "openai" and os.getenv("OPENAI_API_KEY"):
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), temperature=0.3)
+        return ChatOpenAI(model=model_name, temperature=0.3)
     return None
+
+
+def route_model(message: str, policy: str) -> Dict[str, str]:
+    """Choose a model tier based on request complexity and safety policy."""
+    fast_model = os.getenv(FAST_MODEL_ENV) or os.getenv("OPENAI_MODEL") or DEFAULT_FAST_MODEL
+    smart_model = os.getenv(SMART_MODEL_ENV) or DEFAULT_SMART_MODEL
+
+    if policy in {"off_topic", "medical", "food_safety"}:
+        return {
+            "tier": "none",
+            "model": "deterministic-policy",
+            "reason": f"{policy} handled without an LLM call",
+        }
+
+    text = message.lower()
+    if any(term in text for term in SMART_TERMS) or len(message.split()) >= 28:
+        return {
+            "tier": "smart",
+            "model": smart_model,
+            "reason": "complex planning or food-adjacent request",
+        }
+
+    return {
+        "tier": "fast",
+        "model": fast_model,
+        "reason": "simple household cooking request",
+    }
 
 
 class PantryPalAgent:
     def __init__(self) -> None:
-        self.model = _load_model()
-        self.graph = create_react_agent(self.model, TOOLS, state_modifier=SYSTEM_PROMPT) if self.model else None
+        self.fast_model_name = os.getenv(FAST_MODEL_ENV) or os.getenv("OPENAI_MODEL") or DEFAULT_FAST_MODEL
+        self.smart_model_name = os.getenv(SMART_MODEL_ENV) or DEFAULT_SMART_MODEL
+        self.fast_model = _load_model(self.fast_model_name)
+        self.smart_model = _load_model(self.smart_model_name)
+        self.fast_graph = (
+            create_react_agent(self.fast_model, TOOLS, state_modifier=SYSTEM_PROMPT) if self.fast_model else None
+        )
+        self.smart_graph = (
+            create_react_agent(self.smart_model, TOOLS, state_modifier=SYSTEM_PROMPT) if self.smart_model else None
+        )
 
     def invoke(self, message: str, user_id: str, policy: str) -> Dict[str, Any]:
         refusal = refusal_for_policy(policy)
         trace: List[Dict[str, Any]] = []
+        routing = route_model(message, policy)
+        trace.append({"router": routing})
 
         if policy == "food_safety":
             search_result = external_food_search.invoke(
@@ -59,13 +118,24 @@ class PantryPalAgent:
                 ),
                 "trace": trace,
                 "policy": policy,
+                "model": routing["model"],
+                "model_tier": routing["tier"],
+                "routing_reason": routing["reason"],
             }
 
         if refusal:
-            return {"message": refusal, "trace": trace, "policy": policy}
+            return {
+                "message": refusal,
+                "trace": trace,
+                "policy": policy,
+                "model": routing["model"],
+                "model_tier": routing["tier"],
+                "routing_reason": routing["reason"],
+            }
 
-        if self.graph:
-            result = self.graph.invoke(
+        graph = self.smart_graph if routing["tier"] == "smart" else self.fast_graph
+        if graph:
+            result = graph.invoke(
                 {
                     "messages": [
                         SystemMessage(content=f"Current user_id is {user_id}."),
@@ -75,15 +145,22 @@ class PantryPalAgent:
                 config={"configurable": {"thread_id": user_id}},
             )
             messages: list[BaseMessage] = result["messages"]
-            trace = _extract_trace(messages)
+            trace.extend(_extract_trace(messages))
             content = next((msg.content for msg in reversed(messages) if isinstance(msg, AIMessage)), "")
-            return {"message": ensure_allergen_notice(str(content)), "trace": trace, "policy": policy}
+            return {
+                "message": ensure_allergen_notice(str(content)),
+                "trace": trace,
+                "policy": policy,
+                "model": routing["model"],
+                "model_tier": routing["tier"],
+                "routing_reason": routing["reason"],
+            }
 
-        return self._offline_agent(message, user_id, policy)
+        return self._offline_agent(message, user_id, policy, routing)
 
-    def _offline_agent(self, message: str, user_id: str, policy: str) -> Dict[str, Any]:
+    def _offline_agent(self, message: str, user_id: str, policy: str, routing: Dict[str, str]) -> Dict[str, Any]:
         """Deterministic fallback for local demos without an LLM key."""
-        trace: List[Dict[str, Any]] = []
+        trace: List[Dict[str, Any]] = [{"router": routing}]
         profile = get_user_profile.invoke({"user_id": user_id})
         trace.append({"tool": "get_user_profile", "input": {"user_id": user_id}, "output": profile})
 
@@ -92,7 +169,15 @@ class PantryPalAgent:
 
         if not recipes:
             answer = "I can help with that food question, but I do not have a strong recipe match in the demo catalog yet."
-            return {"message": answer, "trace": trace, "policy": policy, "mode": "offline_fallback"}
+            return {
+                "message": answer,
+                "trace": trace,
+                "policy": policy,
+                "mode": "offline_fallback",
+                "model": routing["model"],
+                "model_tier": routing["tier"],
+                "routing_reason": routing["reason"],
+            }
 
         chosen = recipes[0]
         fit = check_recipe_fit_for_user.invoke({"recipe_id": chosen["id"], "user_id": user_id})
@@ -120,7 +205,15 @@ class PantryPalAgent:
                 f"{similar_text}{workaround_text} I can help adapt it instead of leaving you with a dead end."
             )
 
-        return {"message": ensure_allergen_notice(answer), "trace": trace, "policy": policy, "mode": "offline_fallback"}
+        return {
+            "message": ensure_allergen_notice(answer),
+            "trace": trace,
+            "policy": policy,
+            "mode": "offline_fallback",
+            "model": routing["model"],
+            "model_tier": routing["tier"],
+            "routing_reason": routing["reason"],
+        }
 
 
 def _extract_trace(messages: list[BaseMessage]) -> List[Dict[str, Any]]:

@@ -25,6 +25,9 @@ class ChatResponse(BaseModel):
     policy: str
     trace: List[Dict[str, Any]]
     mode: str = "langgraph"
+    model: str = "deterministic-policy"
+    model_tier: str = "none"
+    routing_reason: str = ""
 
 
 app = FastAPI(title="PantryPal Demo")
@@ -73,6 +76,9 @@ def chat(request: ChatRequest) -> ChatResponse:
         policy=result.get("policy", policy),
         trace=result.get("trace", []),
         mode=result.get("mode", "langgraph"),
+        model=result.get("model", "deterministic-policy"),
+        model_tier=result.get("model_tier", "none"),
+        routing_reason=result.get("routing_reason", ""),
     )
 
 
