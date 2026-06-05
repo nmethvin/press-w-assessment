@@ -41,6 +41,8 @@ Scoped but simplified:
 - Add prompt/tool evals for the incident cases, medical refusals, food safety refusals, and allergen notice consistency.
 - Replace keyword relevance checks with a cheap typed LLM classifier, while preserving deterministic medical/food-safety overrides.
 - Build approved recipe ingestion with data-rights constraints and schema validation.
+- Move hard-coded substitutions, equipment equivalents, workarounds, pantry staples, and recipe similarity into a governed data layer or knowledge graph.
+- Use consented/anonymized product usage, support cases, failed fit checks, and accepted adaptations to improve the shared corpus and eval datasets over time.
 - Add account-level memory consent, deletion, and retention controls.
 - Add model routing and token/cost telemetry.
 - Add CI/CD, staging deploys, rollback, and on-call runbooks.

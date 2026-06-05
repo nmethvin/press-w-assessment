@@ -65,6 +65,10 @@ James should own the recipe and constraint data track, with a path into ML-adjac
 - Data quality checks for missing equipment and unsafe tags.
 - Analytics on failed recipe fits and workaround acceptance.
 
+Over time, this data layer should become one of PantryPal's core product assets. The prototype hard-codes seed recipes, substitutions, workarounds, equipment equivalents, pantry staples, and similar-recipe behavior. Production should move those into a governed corpus or knowledge graph that models ingredients, equipment capabilities, cooking methods, substitution families, dietary tags, and recipe similarity. The LLM can propose adaptations, but it should retrieve from and write back to this structured layer through reviewable pipelines rather than inventing the rules from scratch on every turn.
+
+User behavior should improve the shared data layer, with consent, privacy, and quality controls. Examples: repeated failed fit checks can identify missing equipment mappings; accepted substitutions can strengthen ingredient families; users choosing "something similar that fits what I have" can teach recipe similarity; and support incidents can become eval fixtures. This should be treated as product telemetry and corpus curation, not unfiltered personal memory. Personal household memory remains user-specific, while generalized learnings flow into reviewed recipes, taxonomies, workaround patterns, and eval datasets.
+
 ## Sequencing
 
 ### Phase 1: Stabilize the core loop
@@ -105,6 +109,7 @@ Before marketing drives Q3 volume, build the cost and reliability envelope:
 - Replace brittle keyword relevance checks with a cheap typed LLM classifier that sees recent chat and active-recipe context; retain deterministic overrides for explicit medical and specific food-safety determinations.
 - Cache common substitutions, cooking facts, and safe redirects.
 - Keep deterministic checks outside the LLM.
+- Use interaction data to improve the shared recipe/equipment/ingredient corpus and evals, with privacy review and explicit separation from personal household memory.
 - Track blended cost per query, p95 latency, tool failure rate, and answer quality evals.
 - Load test the API and agent paths against expected Q4 traffic.
 
