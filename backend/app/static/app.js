@@ -22,10 +22,66 @@ function fieldFromList(items) {
   return (items || []).join(", ");
 }
 
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatInlineMarkdown(value) {
+  return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function renderMarkdown(content) {
+  const blocks = content.trim().split(/\n{2,}/);
+  const html = [];
+
+  for (const block of blocks) {
+    const lines = block.split("\n").filter((line) => line.trim());
+    if (!lines.length) continue;
+
+    const heading = lines[0].match(/^(#{1,3})\s+(.+)$/);
+    if (heading && lines.length === 1) {
+      const level = heading[1].length + 2;
+      html.push(`<h${level}>${formatInlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    if (lines.every((line) => /^[-*]\s+/.test(line.trim()))) {
+      html.push(
+        `<ul>${lines
+          .map((line) => `<li>${formatInlineMarkdown(line.trim().replace(/^[-*]\s+/, ""))}</li>`)
+          .join("")}</ul>`,
+      );
+      continue;
+    }
+
+    if (lines.every((line) => /^\d+\.\s+/.test(line.trim()))) {
+      html.push(
+        `<ol>${lines
+          .map((line) => `<li>${formatInlineMarkdown(line.trim().replace(/^\d+\.\s+/, ""))}</li>`)
+          .join("")}</ol>`,
+      );
+      continue;
+    }
+
+    html.push(`<p>${lines.map(formatInlineMarkdown).join("<br>")}</p>`);
+  }
+
+  return html.join("");
+}
+
 function appendMessage(content, role = "assistant") {
   const node = document.createElement("div");
   node.className = `message ${role}`;
-  node.textContent = content;
+  if (role === "assistant") {
+    node.innerHTML = renderMarkdown(content);
+  } else {
+    node.textContent = content;
+  }
   messages.appendChild(node);
   messages.scrollTop = messages.scrollHeight;
   return node;

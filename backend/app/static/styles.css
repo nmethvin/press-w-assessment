@@ -147,7 +147,41 @@ button:hover {
   border-radius: 8px;
   padding: 14px 16px;
   line-height: 1.48;
-  white-space: pre-wrap;
+  white-space: normal;
+}
+
+.message p,
+.message ul,
+.message ol,
+.message h3,
+.message h4,
+.message h5 {
+  margin: 0 0 12px;
+}
+
+.message p:last-child,
+.message ul:last-child,
+.message ol:last-child,
+.message h3:last-child,
+.message h4:last-child,
+.message h5:last-child {
+  margin-bottom: 0;
+}
+
+.message h3,
+.message h4,
+.message h5 {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.message ul,
+.message ol {
+  padding-left: 22px;
+}
+
+.message li + li {
+  margin-top: 5px;
 }
 
 .message.user {
