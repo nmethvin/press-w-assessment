@@ -94,6 +94,14 @@ curl -X PUT http://localhost:8000/api/profile/demo \
   }'
 ```
 
+Save household memory through chat:
+
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"demo","message":"Please remember that I prefer quick stovetop dinners and I am allergic to peanuts."}'
+```
+
 Ask for a recipe that would normally need an oven:
 
 ```bash
