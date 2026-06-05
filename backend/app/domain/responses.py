@@ -66,9 +66,8 @@ def validate_recipe_candidate(candidate: RecipeCandidate, profile: UserProfile) 
     pantry = {item.lower() for item in profile.pantry}
     equipment = {item.lower() for item in profile.equipment}
     pantry_staples = {"salt", "pepper", "water", "stock", "oil", "olive oil"}
-    missing_ingredients = [
-        item for item in candidate.ingredients if item.lower() not in pantry and item.lower() not in pantry_staples
-    ]
+    ingredients = _add_implied_recipe_requirements(candidate)
+    missing_ingredients = [item for item in ingredients if item.lower() not in pantry and item.lower() not in pantry_staples]
     missing_equipment = [item for item in candidate.required_equipment if item.lower() not in equipment]
     workarounds = []
     if "pot" in {item.lower() for item in missing_equipment} and "pan" in equipment:
@@ -76,7 +75,7 @@ def validate_recipe_candidate(candidate: RecipeCandidate, profile: UserProfile) 
     return RecipeSuggestion(
         title=candidate.title,
         summary=candidate.summary,
-        ingredients=candidate.ingredients,
+        ingredients=ingredients,
         steps=candidate.steps,
         required_equipment=candidate.required_equipment,
         missing_ingredients=missing_ingredients,
@@ -85,6 +84,21 @@ def validate_recipe_candidate(candidate: RecipeCandidate, profile: UserProfile) 
         workarounds=workarounds,
         can_make=not missing_ingredients and not missing_equipment,
     )
+
+
+MAJOR_INGREDIENT_TERMS = {"beef", "chicken", "pork", "fish", "salmon", "shrimp", "turkey", "tofu"}
+
+
+def _add_implied_recipe_requirements(candidate: RecipeCandidate) -> list[str]:
+    implied = []
+    known = {item.lower() for item in candidate.ingredients}
+    title = candidate.title.lower()
+    steps_text = " ".join(candidate.steps).lower()
+    for term in sorted(MAJOR_INGREDIENT_TERMS):
+        if (term in title or term in steps_text) and term not in known:
+            implied.append(term)
+            known.add(term)
+    return implied + list(candidate.ingredients)
 
 
 def render_assistant_content(content: AssistantContent) -> str:

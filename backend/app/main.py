@@ -118,7 +118,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         message = ensure_allergen_notice(message)
     if result.get("content", {}).get("recipes"):
         active_recipe = storage.save_active_recipe(key, result["content"])
-    storage.add_conversation_message(key, "assistant", message)
+    storage.add_conversation_message(key, "assistant", message, result.get("content"))
     return ChatResponse(
         chat_id=chat_id,
         message=message,

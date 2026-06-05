@@ -210,6 +210,32 @@ def test_recipe_candidate_validation_flags_missing_pizza_base() -> None:
     assert suggestion.missing_equipment == []
 
 
+def test_recipe_candidate_validation_adds_implied_major_ingredients() -> None:
+    init_db()
+    user_id = "candidate-implied-ingredient-test"
+    update_profile(
+        user_id,
+        ProfileUpdate(
+            pantry=["carrots", "potatoes", "olive oil", "garlic", "tomatoes", "chicken stock"],
+            equipment=["pot"],
+            preferences=[],
+            allergies=[],
+        ),
+    )
+    candidate = RecipeCandidate(
+        title="Hearty Beef Stew",
+        ingredients=["carrots", "potatoes", "olive oil", "garlic", "tomatoes", "chicken stock"],
+        required_equipment=["pot"],
+        steps=["Heat olive oil in a large pot.", "Add the chicken and brown on all sides."],
+    )
+
+    suggestion = validate_recipe_candidate(candidate, get_profile(user_id))
+
+    assert suggestion.can_make is False
+    assert suggestion.ingredients[:2] == ["beef", "chicken"]
+    assert suggestion.missing_ingredients == ["beef", "chicken"]
+
+
 def test_candidate_tool_result_becomes_structured_content() -> None:
     suggestion = {
         "title": "Pesto Chicken Pizza",

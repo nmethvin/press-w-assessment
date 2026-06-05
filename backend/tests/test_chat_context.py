@@ -35,6 +35,7 @@ def test_chat_endpoint_returns_active_recipe() -> None:
 
     assert response["active_recipe"] is not None
     assert loaded["active_recipe"]["recipes"][0]["title"] == "Chicken Potato Stew"
+    assert loaded["messages"][1]["content_payload"]["recipes"][0]["title"] == "Chicken Potato Stew"
 
 
 def test_new_chat_starts_clean_without_destroying_previous_chat() -> None:

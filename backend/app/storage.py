@@ -48,6 +48,7 @@ def init_db() -> None:
                 user_id TEXT NOT NULL,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
+                content_payload TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -77,6 +78,9 @@ def init_db() -> None:
                 "INSERT OR IGNORE INTO recipes (id, payload) VALUES (?, ?)",
                 (recipe.id, json.dumps(recipe.__dict__)),
             )
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(conversation_messages)").fetchall()}
+        if "content_payload" not in columns:
+            conn.execute("ALTER TABLE conversation_messages ADD COLUMN content_payload TEXT")
         conn.commit()
 
 
@@ -217,11 +221,11 @@ def update_chat_activity(user_id: str, chat_id: str, first_user_message: Optiona
         conn.commit()
 
 
-def add_conversation_message(user_id: str, role: str, content: str) -> None:
+def add_conversation_message(user_id: str, role: str, content: str, content_payload: Optional[dict] = None) -> None:
     with connect() as conn:
         conn.execute(
-            "INSERT INTO conversation_messages (user_id, role, content) VALUES (?, ?, ?)",
-            (user_id, role, content),
+            "INSERT INTO conversation_messages (user_id, role, content, content_payload) VALUES (?, ?, ?, ?)",
+            (user_id, role, content, json.dumps(content_payload) if content_payload else None),
         )
         conn.commit()
 
@@ -245,14 +249,20 @@ def get_conversation(user_id: str) -> list[dict[str, str]]:
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT role, content
+            SELECT role, content, content_payload
             FROM conversation_messages
             WHERE user_id = ?
             ORDER BY id ASC
             """,
             (user_id,),
         ).fetchall()
-    return [{"role": row["role"], "content": row["content"]} for row in rows]
+    messages = []
+    for row in rows:
+        item = {"role": row["role"], "content": row["content"]}
+        if row["content_payload"]:
+            item["content_payload"] = json.loads(row["content_payload"])
+        messages.append(item)
+    return messages
 
 
 def clear_conversation(user_id: str) -> None:

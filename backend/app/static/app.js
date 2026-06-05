@@ -218,7 +218,8 @@ function renderConversation(history) {
     return;
   }
   for (const item of history) {
-    appendMessage(item.content, item.role === "user" ? "user" : "assistant");
+    const content = item.role === "assistant" && item.content_payload ? item.content_payload : item.content;
+    appendMessage(content, item.role === "user" ? "user" : "assistant");
   }
 }
 
