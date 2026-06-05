@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+from typing import Optional
+
+ALLERGEN_NOTICE = (
+    "Allergen note: Please verify every ingredient and label for your household's allergies and sensitivities."
+)
+
+FOOD_SCOPE_TERMS = {
+    "cook",
+    "cooking",
+    "recipe",
+    "ingredient",
+    "ingredients",
+    "meal",
+    "dinner",
+    "lunch",
+    "breakfast",
+    "pantry",
+    "equipment",
+    "substitute",
+    "substitution",
+    "wine",
+    "pairing",
+    "hosting",
+    "menu",
+    "food",
+    "kitchen",
+    "leftovers",
+    "chicken",
+    "pasta",
+    "vegetarian",
+    "keto",
+}
+
+MEDICAL_TERMS = {
+    "diabetes",
+    "diabetic",
+    "pregnant",
+    "pregnancy",
+    "blood pressure",
+    "hypertension",
+    "cholesterol",
+    "weight loss",
+    "therapeutic",
+    "medical",
+}
+
+FOOD_SAFETY_TERMS = {
+    "safe to eat",
+    "spoiled",
+    "spoilage",
+    "food poisoning",
+    "left out",
+    "expired",
+    "smells bad",
+}
+
+
+def classify_message(message: str) -> str:
+    text = message.lower()
+    if any(term in text for term in FOOD_SAFETY_TERMS):
+        return "food_safety"
+    if any(term in text for term in MEDICAL_TERMS):
+        return "medical"
+    tokens = set(text.replace("?", " ").replace(",", " ").split())
+    if tokens and not (tokens & FOOD_SCOPE_TERMS):
+        return "off_topic"
+    return "food"
+
+
+def needs_allergen_notice(text: str) -> bool:
+    lower = text.lower()
+    return any(word in lower for word in ["recipe", "ingredient", "ingredients", "make", "cook", "substitute"])
+
+
+def ensure_allergen_notice(text: str) -> str:
+    if ALLERGEN_NOTICE.lower() in text.lower():
+        return text
+    if needs_allergen_notice(text):
+        return f"{text.rstrip()}\n\n{ALLERGEN_NOTICE}"
+    return text
+
+
+def refusal_for_policy(policy: str) -> Optional[str]:
+    if policy == "medical":
+        return (
+            "I cannot provide medical or therapeutic nutrition advice. I can help filter recipes by neutral "
+            "preferences you choose, like vegetarian, keto, spicy, or nut-free, but please ask a qualified "
+            "professional about diet choices for a medical condition."
+        )
+    if policy == "off_topic":
+        return (
+            "I am PantryPal, so I stay focused on household cooking, ingredients, kitchen equipment, meal planning, "
+            "substitutions, pairings, and hosting menus. Bring me a food question and I am in."
+        )
+    return None

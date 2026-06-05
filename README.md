@@ -1,94 +1,131 @@
-# Director of Engineering Assessment - Build Day
+# PantryPal Assessment Demo
 
-**Role:** Director of Engineering
-**Time:** 4 hours, self-timeboxed
-**Submission:** Public GitHub repo, or private repo shared with @elmdecoste and @bgreal5
+PantryPal is a household-focused cooking assistant prototype. It demonstrates the assessment strategy in code: persistent pantry/equipment memory, deterministic recipe-fit checks, LangGraph tool orchestration, external search, and legal/safety guardrails.
 
----
+The app is intentionally compact. FastAPI serves both the API and a vanilla chat frontend so reviewers can clone, run, and test the core behavior quickly.
 
-## Before you start
+## What is built
 
-Your 4-hour window starts now. The delivery system tracks the clock automatically, so there's no need to mark a start time yourself.
+- Python backend using FastAPI.
+- LangGraph agent with LangChain tools.
+- LLM calls routed through LangChain via `langchain-openai` when `OPENAI_API_KEY` is set.
+- Offline fallback mode so the demo still runs without an LLM key.
+- Persistent SQLite household memory for pantry, equipment, preferences, and allergies.
+- Structured local recipe catalog with required equipment and ingredients.
+- Deterministic fit checks before recommending catalog recipes.
+- External search tool using DuckDuckGo Search, with authoritative food-safety fallback links.
+- Chat frontend with profile editing, user-friendly tool status, and engineer trace mode.
+- Docker setup.
 
-You've already read the PantryPal brief. Now it's time to make decisions and ship.
+## Run locally
 
-How to work:
+```bash
+cd /Users/nathanmethvin/Documents/projects/press-w-assessment
+python -m venv .venv
+. .venv/bin/activate
+pip install -r backend/requirements.txt
+PYTHONPATH=backend uvicorn app.main:app --reload
+```
 
-1. Decide what to build, what to plan, and what to communicate.
-2. Commit as you go so we can see your progress.
-3. At the 4-hour mark, stop. If you commit past that point, note them as post-window in your writeup. We'd rather see honesty than a silent overrun.
+Open [http://localhost:8000](http://localhost:8000).
 
-If something goes wrong (life, illness, internet), just tell us. Rescheduling is fine; silent extensions are not.
+With an OpenAI key:
 
----
+```bash
+export OPENAI_API_KEY=your-key
+export OPENAI_MODEL=gpt-4o-mini
+PYTHONPATH=backend uvicorn app.main:app --reload
+```
 
-## Deliverables
+Without a key, the app uses an offline deterministic fallback. That fallback is not a replacement for the LangGraph production path, but it keeps the prototype reviewable.
 
-You will submit six things:
+## Run with Docker
 
-### 1. A scoping document (`SCOPING.md`)
+```bash
+docker compose up --build
+```
 
-Before writing code, produce a short scoping doc with the following sections:
+Open [http://localhost:8000](http://localhost:8000).
 
-- **Scope committed:** what you're actually building, as a tight list
-- **Scope cut:** what you heard but decided not to do, with reasoning
-- **Contradictions resolved:** where stakeholders disagreed, and how you decided
-- **What I'd reject:** one or more things a reasonable engineer might build here that you think are actively wrong, and why
-- **Clarifying questions:** what you'd want answered before a production build
-- **Assumptions made:** what you decided without asking
-- **Risks accepted:** what could bite later and why you're accepting it
+To run the LangGraph/OpenAI path in Docker:
 
-Keep this to 1-2 pages. Three sharp, defensible entries per section beats fifteen generic ones.
+```bash
+OPENAI_API_KEY=your-key docker compose up --build
+```
 
-### 2. A stakeholder alignment email (`STAKEHOLDER_EMAIL.md`)
+## Example requests
 
-You've read the inputs from Priya, Marcus, Jordan, and Diane. They don't fully agree. Write the email you'd actually send to align them before you start building. This isn't a summary of what you found. It's a proposal for how to move forward, addressed to real people with real opinions. This is an email, not a memo. Keep it to something people would actually read.
+Health check:
 
-### 3. A technical strategy (`TECHNICAL_STRATEGY.md`)
+```bash
+curl http://localhost:8000/api/health
+```
 
-PantryPal is at 12k MAU. The board expects 200k by Q4. Write the technical strategy for getting there. This should cover:
+Get the demo profile:
 
-- How you'd decompose the work across the existing team
-- What you'd sequence first and why
-- How you'd handle the scaling, cost, and operational challenges between here and there
+```bash
+curl http://localhost:8000/api/profile/demo
+```
 
-This is not a feature roadmap. It's a technical leadership document about how you'd get a real product to real scale with the team and constraints you've been given. Keep it to 2-3 pages. Specific and opinionated beats comprehensive and safe.
+Update household memory:
 
-### 4. A working system
+```bash
+curl -X PUT http://localhost:8000/api/profile/demo \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pantry": ["chicken", "lemon", "garlic", "olive oil", "herbs"],
+    "equipment": ["stovetop", "pan", "knife"],
+    "preferences": ["fast", "stovetop"],
+    "allergies": []
+  }'
+```
 
-Build a working prototype that demonstrates your technical vision for the product. Baseline requirements (non-negotiable):
+Ask for a recipe that would normally need an oven:
 
-- A Python backend using **FastAPI** and **LangGraph**
-- LLM-driven tool use: the model decides when to invoke tools (no hardcoded sequences)
-- At least one external tool (web search or equivalent)
-- All LLM calls routed through **LangChain** (no model-specific SDKs directly)
-- A chat frontend (stack of your choice; we recommend something you're fast in)
-- Docker setup, so we can clone and run
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"demo","message":"I want roasted chicken tonight"}'
+```
 
-Everything else is up to you. Implement what your scope says you'll implement.
+Ask a food-safety question:
 
-### 5. A README
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"demo","message":"Is this chicken safe to eat after sitting out?"}'
+```
 
-Setup instructions, example requests (curl is fine), and anything a teammate would need to run and understand the code.
+Ask an off-topic question:
 
-### 6. A trade-offs writeup (`TRADEOFFS.md`)
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"demo","message":"Write my cover letter"}'
+```
 
-Short doc covering:
+## Architecture
 
-- What you actually built vs. what you scoped (time pressure is expected; tell us what got cut)
-- Specific trade-offs you made and why
-- What you'd do next with more time
-- Known issues or unhandled cases
+Important files:
 
----
+- `backend/app/main.py`: FastAPI app, static frontend, chat/profile endpoints.
+- `backend/app/agent/graph.py`: LangGraph agent setup, policy handling, offline fallback.
+- `backend/app/agent/tools.py`: LangChain tools exposed to the agent.
+- `backend/app/domain/recipes.py`: recipe schema, search, deterministic fit checks.
+- `backend/app/domain/policy.py`: off-topic, medical, food-safety, and allergen policy helpers.
+- `backend/app/storage.py`: SQLite persistence and seed catalog.
+- `backend/app/static/`: chat frontend.
 
-## Expectations and norms
+## Tests
 
-- **Use AI tools.** We do, and we expect you to. We're evaluating your judgment and your output, not whether you can type fast.
-- **Don't optimize for feature count.** A smaller working system with defensible choices beats a larger system built on unexamined assumptions.
-- **Ship something that runs.** If you have to cut, cut scope before quality.
-- **Document unfinished work.** Stubs with clear TODOs are fine. Leave a clear trail of what's unfinished.
-- **Expect robustness to be tested.** We'll exercise your system with inputs you didn't design for.
-- **How you allocate your time matters.** A DoE who spends 3.5 hours coding and 15 minutes on strategy is telling us something. So is one who writes a beautiful strategy doc and ships nothing.
+```bash
+PYTHONPATH=backend pytest backend/tests
+```
 
-Good luck.
+## Assessment docs
+
+- `SCOPING.md`
+- `STAKEHOLDER_EMAIL.md`
+- `TECHNICAL_STRATEGY.md`
+- `IMPLEMENTATION_PLAN.md`
+- `TRADEOFFS.md`

@@ -1,0 +1,14 @@
+services:
+  pantrypal:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PANTRYPAL_MODEL_PROVIDER: ${PANTRYPAL_MODEL_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    volumes:
+      - pantrypal-data:/app/backend/data
+
+volumes:
+  pantrypal-data:

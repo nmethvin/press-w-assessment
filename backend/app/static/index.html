@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PantryPal</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="profile-panel">
+        <div>
+          <p class="eyebrow">Household Memory</p>
+          <h1>PantryPal</h1>
+        </div>
+
+        <label>
+          Pantry
+          <textarea id="pantry" rows="5"></textarea>
+        </label>
+        <label>
+          Equipment
+          <textarea id="equipment" rows="4"></textarea>
+        </label>
+        <label>
+          Preferences
+          <textarea id="preferences" rows="3"></textarea>
+        </label>
+        <label>
+          Allergies
+          <textarea id="allergies" rows="3"></textarea>
+        </label>
+        <button id="saveProfile">Save Memory</button>
+        <p class="legal-note">
+          Allergen note is enforced for recipe and ingredient suggestions. Medical nutrition and specific food-safety determinations are out of scope.
+        </p>
+      </aside>
+
+      <section class="chat-panel">
+        <header class="chat-header">
+          <div>
+            <p class="eyebrow">Cooking Assistant</p>
+            <h2>The friend who actually checks your kitchen first.</h2>
+          </div>
+          <label class="trace-toggle">
+            <input id="traceToggle" type="checkbox" />
+            Engineer trace
+          </label>
+        </header>
+
+        <div id="messages" class="messages"></div>
+
+        <form id="chatForm" class="composer">
+          <input
+            id="messageInput"
+            autocomplete="off"
+            placeholder="Ask what to make with what you have..."
+          />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

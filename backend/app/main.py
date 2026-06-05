@@ -1,0 +1,84 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict, List
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from app import storage
+from app.agent.graph import PantryPalAgent
+from app.domain.policy import classify_message, ensure_allergen_notice
+from app.domain.profile import ProfileUpdate, UserProfile
+
+
+class ChatRequest(BaseModel):
+    message: str
+    user_id: str = "demo"
+
+
+class ChatResponse(BaseModel):
+    message: str
+    policy: str
+    trace: List[Dict[str, Any]]
+    mode: str = "langgraph"
+
+
+app = FastAPI(title="PantryPal Demo")
+agent = PantryPalAgent()
+static_dir = Path(__file__).parent / "static"
+storage.init_db()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.on_event("startup")
+def startup() -> None:
+    storage.init_db()
+
+
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/api/profile/{user_id}", response_model=UserProfile)
+def get_profile(user_id: str) -> UserProfile:
+    return storage.get_profile(user_id)
+
+
+@app.put("/api/profile/{user_id}", response_model=UserProfile)
+def put_profile(user_id: str, update: ProfileUpdate) -> UserProfile:
+    return storage.update_profile(user_id, update)
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+def chat(request: ChatRequest) -> ChatResponse:
+    policy = classify_message(request.message)
+    result = agent.invoke(request.message, request.user_id, policy)
+    message = result["message"]
+    if result.get("policy", policy) == "food":
+        message = ensure_allergen_notice(message)
+    return ChatResponse(
+        message=message,
+        policy=result.get("policy", policy),
+        trace=result.get("trace", []),
+        mode=result.get("mode", "langgraph"),
+    )
+
+
+app.mount("/assets", StaticFiles(directory=static_dir), name="assets")
+
+
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse(static_dir / "index.html")
