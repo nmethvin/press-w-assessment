@@ -18,9 +18,11 @@ from app.domain.profile import ProfileUpdate, UserProfile
 class ChatRequest(BaseModel):
     message: str
     user_id: str = "demo"
+    chat_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
+    chat_id: str
     message: str
     content: Optional[Dict[str, Any]] = None
     active_recipe: Optional[Dict[str, Any]] = None
@@ -71,6 +73,28 @@ def get_active_recipe(user_id: str) -> Dict[str, Any]:
     return {"active_recipe": storage.get_active_recipe(user_id)}
 
 
+@app.get("/api/chats/{user_id}")
+def list_chats(user_id: str) -> Dict[str, Any]:
+    return {"chats": storage.list_chats(user_id)}
+
+
+@app.post("/api/chats/{user_id}")
+def create_chat(user_id: str) -> Dict[str, Any]:
+    chat = storage.create_chat(user_id)
+    return {"chat": chat, "messages": [], "active_recipe": None}
+
+
+@app.get("/api/chats/{user_id}/{chat_id}")
+def get_chat(user_id: str, chat_id: str) -> Dict[str, Any]:
+    chat = storage.ensure_chat(user_id, chat_id)
+    key = storage.session_key(user_id, chat["chat_id"])
+    return {
+        "chat": chat,
+        "messages": storage.get_conversation(key),
+        "active_recipe": storage.get_active_recipe(key),
+    }
+
+
 @app.post("/api/session/{user_id}/reset")
 def reset_session(user_id: str) -> Dict[str, str]:
     storage.reset_session(user_id)
@@ -79,19 +103,24 @@ def reset_session(user_id: str) -> Dict[str, str]:
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
-    recent_messages = storage.get_recent_conversation(request.user_id)
-    active_recipe = storage.get_active_recipe(request.user_id)
+    chat_session = storage.ensure_chat(request.user_id, request.chat_id)
+    chat_id = chat_session["chat_id"]
+    key = storage.session_key(request.user_id, chat_id)
+    recent_messages = storage.get_recent_conversation(key)
+    active_recipe = storage.get_active_recipe(key)
     active_context = recent_messages + ([{"role": "assistant", "content": str(active_recipe)}] if active_recipe else [])
     policy = classify_message(request.message, active_context)
-    storage.add_conversation_message(request.user_id, "user", request.message)
-    result = agent.invoke(request.message, request.user_id, policy, recent_messages, active_recipe)
+    storage.add_conversation_message(key, "user", request.message)
+    storage.update_chat_activity(request.user_id, chat_id, request.message)
+    result = agent.invoke(request.message, request.user_id, policy, recent_messages, active_recipe, thread_id=key)
     message = result["message"]
     if result.get("policy", policy) == "food":
         message = ensure_allergen_notice(message)
     if result.get("content", {}).get("recipes"):
-        active_recipe = storage.save_active_recipe(request.user_id, result["content"])
-    storage.add_conversation_message(request.user_id, "assistant", message)
+        active_recipe = storage.save_active_recipe(key, result["content"])
+    storage.add_conversation_message(key, "assistant", message)
     return ChatResponse(
+        chat_id=chat_id,
         message=message,
         content=result.get("content"),
         active_recipe=active_recipe,

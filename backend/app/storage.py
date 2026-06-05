@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -53,6 +54,17 @@ def init_db() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                chat_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS active_recipes (
                 user_id TEXT PRIMARY KEY,
                 payload TEXT NOT NULL,
@@ -66,6 +78,10 @@ def init_db() -> None:
                 (recipe.id, json.dumps(recipe.__dict__)),
             )
         conn.commit()
+
+
+def session_key(user_id: str, chat_id: str) -> str:
+    return f"{user_id}:{chat_id}"
 
 
 def get_profile(user_id: str = "demo") -> UserProfile:
@@ -135,6 +151,72 @@ def get_recipe(recipe_id: str) -> Optional[Recipe]:
     return Recipe(**json.loads(row["payload"])) if row else None
 
 
+def create_chat(user_id: str = "demo") -> dict:
+    chat_id = uuid.uuid4().hex[:12]
+    title = "New chat"
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO chat_sessions (chat_id, user_id, title) VALUES (?, ?, ?)",
+            (chat_id, user_id, title),
+        )
+        conn.commit()
+    return {"chat_id": chat_id, "user_id": user_id, "title": title}
+
+
+def list_chats(user_id: str = "demo") -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT chat_id, user_id, title, created_at, updated_at
+            FROM chat_sessions
+            WHERE user_id = ?
+            ORDER BY updated_at DESC, created_at DESC
+            """,
+            (user_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_chat(user_id: str, chat_id: str) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT chat_id, user_id, title, created_at, updated_at
+            FROM chat_sessions
+            WHERE user_id = ? AND chat_id = ?
+            """,
+            (user_id, chat_id),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def ensure_chat(user_id: str, chat_id: Optional[str]) -> dict:
+    if chat_id:
+        existing = get_chat(user_id, chat_id)
+        if existing:
+            return existing
+    return create_chat(user_id)
+
+
+def update_chat_activity(user_id: str, chat_id: str, first_user_message: Optional[str] = None) -> None:
+    existing = get_chat(user_id, chat_id)
+    if not existing:
+        return
+    title = existing["title"]
+    if first_user_message and title == "New chat":
+        title = first_user_message.strip()[:48] or title
+    with connect() as conn:
+        conn.execute(
+            """
+            UPDATE chat_sessions
+            SET title = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND chat_id = ?
+            """,
+            (title, user_id, chat_id),
+        )
+        conn.commit()
+
+
 def add_conversation_message(user_id: str, role: str, content: str) -> None:
     with connect() as conn:
         conn.execute(
@@ -157,6 +239,20 @@ def get_recent_conversation(user_id: str, limit: int = 8) -> list[dict[str, str]
             (user_id, limit),
         ).fetchall()
     return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+
+
+def get_conversation(user_id: str) -> list[dict[str, str]]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT role, content
+            FROM conversation_messages
+            WHERE user_id = ?
+            ORDER BY id ASC
+            """,
+            (user_id,),
+        ).fetchall()
+    return [{"role": row["role"], "content": row["content"]} for row in rows]
 
 
 def clear_conversation(user_id: str) -> None:

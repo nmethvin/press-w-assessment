@@ -166,6 +166,7 @@ class PantryPalAgent:
         policy: str,
         recent_messages: Optional[List[Dict[str, str]]] = None,
         active_recipe: Optional[Dict[str, Any]] = None,
+        thread_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         refusal = refusal_for_policy(policy)
         trace: List[Dict[str, Any]] = []
@@ -210,7 +211,7 @@ class PantryPalAgent:
             }
 
         if is_active_recipe_edit(message, active_recipe):
-            revision_result = self._revise_active_recipe(message, user_id, routing)
+            revision_result = self._revise_active_recipe(message, user_id, routing, active_recipe)
             if revision_result:
                 revision_result["trace"] = trace + revision_result.get("trace", [])
                 return revision_result
@@ -227,7 +228,7 @@ class PantryPalAgent:
                         HumanMessage(content=message),
                     ]
                 },
-                config={"configurable": {"thread_id": user_id}},
+                config={"configurable": {"thread_id": thread_id or user_id}},
             )
             messages: list[BaseMessage] = result["messages"]
             trace.extend(_extract_trace(messages))
@@ -310,9 +311,9 @@ class PantryPalAgent:
         message: str,
         user_id: str,
         routing: Dict[str, str],
+        active_recipe: Optional[Dict[str, Any]],
     ) -> Optional[Dict[str, Any]]:
         model = self.smart_model or self.fast_model
-        active_recipe = storage.get_active_recipe(user_id)
         if not model or not active_recipe or not active_recipe.get("recipes"):
             return None
 

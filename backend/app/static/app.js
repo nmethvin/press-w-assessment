@@ -11,8 +11,10 @@ const form = document.querySelector("#chatForm");
 const input = document.querySelector("#messageInput");
 const traceToggle = document.querySelector("#traceToggle");
 const activeRecipePanel = document.querySelector("#activeRecipePanel");
-const activeRecipeSidebar = document.querySelector("#activeRecipeSidebar");
+const chatList = document.querySelector("#chatList");
 let currentActiveRecipe = null;
+let currentChatId = null;
+const greeting = "Tell me what you have, or ask for a dinner idea. I will check your pantry and equipment before I get bossy.";
 
 function listFromField(value) {
   return value
@@ -194,12 +196,10 @@ function renderActiveRecipe(content) {
   currentActiveRecipe = content || null;
   if (!content?.recipes?.length) {
     activeRecipePanel.innerHTML = "Recipe cards will pin here as you work.";
-    activeRecipeSidebar.textContent = "No active recipe yet.";
     return;
   }
   const recipeHtml = content.recipes.map(renderRecipeCard).join("");
   activeRecipePanel.innerHTML = recipeHtml;
-  activeRecipeSidebar.innerHTML = recipeHtml;
 }
 
 async function loadProfile() {
@@ -211,16 +211,47 @@ async function loadProfile() {
   fields.allergies.value = fieldFromList(profile.allergies);
 }
 
-async function loadActiveRecipe() {
-  const response = await fetch(`/api/active-recipe/${userId}`);
-  const payload = await response.json();
-  renderActiveRecipe(payload.active_recipe);
+function renderConversation(history) {
+  messages.innerHTML = "";
+  if (!history?.length) {
+    appendMessage(greeting, "assistant");
+    return;
+  }
+  for (const item of history) {
+    appendMessage(item.content, item.role === "user" ? "user" : "assistant");
+  }
 }
 
-async function resetSession() {
-  await fetch(`/api/session/${userId}/reset`, { method: "POST" });
-  messages.innerHTML = "";
+async function loadChats() {
+  const response = await fetch(`/api/chats/${userId}`);
+  const payload = await response.json();
+  chatList.innerHTML = "";
+  for (const chat of payload.chats || []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `chat-list-item ${chat.chat_id === currentChatId ? "active" : ""}`;
+    button.textContent = chat.title || "New chat";
+    button.addEventListener("click", () => switchChat(chat.chat_id));
+    chatList.appendChild(button);
+  }
+}
+
+async function switchChat(chatId) {
+  const response = await fetch(`/api/chats/${userId}/${chatId}`);
+  const payload = await response.json();
+  currentChatId = payload.chat.chat_id;
+  renderConversation(payload.messages);
+  renderActiveRecipe(payload.active_recipe);
+  await loadChats();
+}
+
+async function createNewChat() {
+  const response = await fetch(`/api/chats/${userId}`, { method: "POST" });
+  const payload = await response.json();
+  currentChatId = payload.chat.chat_id;
+  renderConversation([]);
   renderActiveRecipe(null);
+  await loadChats();
 }
 
 document.querySelectorAll(".tab-button").forEach((button) => {
@@ -248,6 +279,7 @@ async function saveProfile() {
 }
 
 document.querySelector("#saveProfile").addEventListener("click", saveProfile);
+document.querySelector("#newChat").addEventListener("click", createNewChat);
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -261,9 +293,10 @@ form.addEventListener("submit", async (event) => {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, message }),
+      body: JSON.stringify({ user_id: userId, chat_id: currentChatId, message }),
     });
     const result = await response.json();
+    currentChatId = result.chat_id;
     status.textContent = `Policy: ${result.policy}. Mode: ${result.mode}. Model: ${result.model_tier} (${result.model}).`;
     const chatContent = result.content?.display_recipe_inline === false ? result.message : result.content || result.message;
     appendMessage(chatContent, "assistant");
@@ -276,6 +309,7 @@ form.addEventListener("submit", async (event) => {
     }
     appendTrace(result.trace);
     await loadProfile();
+    await loadChats();
   } catch (error) {
     status.textContent = "Something went wrong while contacting PantryPal.";
     appendMessage(String(error), "assistant");
@@ -283,12 +317,8 @@ form.addEventListener("submit", async (event) => {
 });
 
 async function initializeApp() {
-  await resetSession();
   await loadProfile();
-  appendMessage(
-    "Tell me what you have, or ask for a dinner idea. I will check your pantry and equipment before I get bossy.",
-    "assistant",
-  );
+  await createNewChat();
 }
 
 initializeApp();
