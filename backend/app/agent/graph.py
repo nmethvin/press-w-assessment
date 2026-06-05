@@ -11,7 +11,14 @@ from app import storage
 from app.agent.tools import TOOLS, check_recipe_fit_for_user, external_food_search, get_user_profile, search_recipe_catalog
 from app.domain.policy import ensure_allergen_notice, refusal_for_policy
 from app.domain.recipes import check_recipe_fit
-from app.domain.responses import AssistantContent, build_recipe_suggestion, render_assistant_content
+from app.domain.responses import (
+    AssistantContent,
+    RecipeCandidate,
+    RecipeSuggestion,
+    build_recipe_suggestion,
+    render_assistant_content,
+    validate_recipe_candidate,
+)
 
 
 FAST_MODEL_ENV = "PANTRYPAL_FAST_MODEL"
@@ -47,6 +54,8 @@ Scope:
 Tool discipline:
 - Use tools when profile, pantry, equipment, recipe fit, substitutions, or external references would improve correctness.
 - For recipe suggestions, check the user's profile and recipe fit before recommending.
+- If you invent a recipe that is not from the catalog, call validate_recipe_candidate with the full ingredient and required equipment list before recommending it.
+- Use exact saved pantry item names when they apply. If a required component is an alternative group, name it generically, e.g. "pizza base".
 - If equipment or ingredients are missing, offer a workaround or similar feasible option.
 - Keep answers concise and useful.
 
@@ -170,7 +179,15 @@ class PantryPalAgent:
             trace.extend(_extract_trace(messages))
             content = next((msg.content for msg in reversed(messages) if isinstance(msg, AIMessage)), "")
             content = remove_unsafe_allergen_claims(str(content))
-            structured_content, structured_trace = structure_response_from_catalog_mentions(content, user_id)
+            structured_content, structured_trace = structure_response_from_candidate_tool(trace)
+            if not structured_content:
+                structured_content, structured_trace = structure_response_from_catalog_mentions(content, user_id)
+            if not structured_content:
+                structured_content, structured_trace = self._structure_non_catalog_recipe(
+                    content,
+                    user_id,
+                    routing["tier"],
+                )
             trace.extend(structured_trace)
             if structured_content:
                 rendered_content = render_assistant_content(structured_content)
@@ -193,6 +210,45 @@ class PantryPalAgent:
             }
 
         return self._offline_agent(message, user_id, policy, routing, recent_messages or [])
+
+    def _structure_non_catalog_recipe(
+        self,
+        content: str,
+        user_id: str,
+        tier: str,
+    ) -> tuple[Optional[AssistantContent], List[Dict[str, Any]]]:
+        model = self.smart_model if tier == "smart" else self.fast_model
+        if not model or "recipe" not in content.lower() and "ingredients" not in content.lower():
+            return None, []
+
+        profile = storage.get_profile(user_id)
+        formatter = model.with_structured_output(RecipeCandidate, method="function_calling")
+        prompt = (
+            "Extract exactly one proposed recipe candidate from the assistant draft below. "
+            "Use concise canonical ingredient names. When an ingredient is already in the saved pantry, "
+            "use the exact saved pantry term. If the recipe requires a category the user lacks, keep it generic "
+            "such as 'pizza base'. Do not invent ingredients that are not required.\n\n"
+            f"Saved pantry: {profile.pantry}\n"
+            f"Saved equipment: {profile.equipment}\n\n"
+            f"Assistant draft:\n{content}"
+        )
+        try:
+            candidate = formatter.invoke(prompt)
+        except Exception as exc:
+            return None, [{"validator": "structured_candidate_extraction", "error": str(exc)}]
+
+        suggestion = validate_recipe_candidate(candidate, profile)
+        trace = [
+            {
+                "validator": "structured_candidate_extraction",
+                "recipe_name": suggestion.title,
+                "can_make": suggestion.can_make,
+                "missing_equipment": suggestion.missing_equipment,
+                "missing_ingredients": suggestion.missing_ingredients,
+            }
+        ]
+        intro = "I checked that proposed recipe against your saved pantry and equipment."
+        return AssistantContent(response_type="recipe", intro=intro, recipes=[suggestion]), trace
 
     def _offline_agent(
         self,
@@ -384,6 +440,35 @@ def structure_response_from_catalog_mentions(content: str, user_id: str) -> tupl
         return None, trace
     intro = "I checked those recipe ideas against your saved pantry and equipment."
     return AssistantContent(response_type="options" if len(suggestions) > 1 else "recipe", intro=intro, recipes=suggestions), trace
+
+
+def structure_response_from_candidate_tool(trace: List[Dict[str, Any]]) -> tuple[Optional[AssistantContent], List[Dict[str, Any]]]:
+    suggestions = []
+    validator_trace: List[Dict[str, Any]] = []
+    for item in trace:
+        if item.get("tool_result") != "validate_recipe_candidate":
+            continue
+        try:
+            suggestion = RecipeSuggestion.model_validate_json(item["output"])
+        except Exception:
+            continue
+        suggestions.append(suggestion)
+        validator_trace.append(
+            {
+                "validator": "structured_candidate",
+                "recipe_name": suggestion.title,
+                "can_make": suggestion.can_make,
+                "missing_equipment": suggestion.missing_equipment,
+                "missing_ingredients": suggestion.missing_ingredients,
+            }
+        )
+    if not suggestions:
+        return None, validator_trace
+    if any(not suggestion.can_make for suggestion in suggestions):
+        intro = "I checked that idea against your saved pantry and equipment before recommending it."
+    else:
+        intro = "This recipe candidate fits your saved pantry and equipment."
+    return AssistantContent(response_type="options" if len(suggestions) > 1 else "recipe", intro=intro, recipes=suggestions), validator_trace
 
 
 PANTRY_STAPLES = {"salt", "pepper", "water", "stock", "oil", "olive oil"}

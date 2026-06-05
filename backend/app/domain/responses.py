@@ -30,6 +30,14 @@ class AssistantContent(BaseModel):
     allergen_notice: str = ALLERGEN_NOTICE
 
 
+class RecipeCandidate(BaseModel):
+    title: str
+    summary: str = ""
+    ingredients: list[str] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list)
+    required_equipment: list[str] = Field(default_factory=list)
+
+
 def build_recipe_suggestion(recipe: Recipe, profile: UserProfile) -> RecipeSuggestion:
     fit = check_recipe_fit(recipe, profile.pantry, profile.equipment)
     substitutions = [f"{ingredient}: {substitute}" for ingredient, substitute in fit.substitutions.items()]
@@ -44,6 +52,31 @@ def build_recipe_suggestion(recipe: Recipe, profile: UserProfile) -> RecipeSugge
         substitutions=substitutions,
         workarounds=fit.workarounds,
         can_make=fit.can_make,
+    )
+
+
+def validate_recipe_candidate(candidate: RecipeCandidate, profile: UserProfile) -> RecipeSuggestion:
+    pantry = {item.lower() for item in profile.pantry}
+    equipment = {item.lower() for item in profile.equipment}
+    pantry_staples = {"salt", "pepper", "water", "stock", "oil", "olive oil"}
+    missing_ingredients = [
+        item for item in candidate.ingredients if item.lower() not in pantry and item.lower() not in pantry_staples
+    ]
+    missing_equipment = [item for item in candidate.required_equipment if item.lower() not in equipment]
+    workarounds = []
+    if "pot" in {item.lower() for item in missing_equipment} and "pan" in equipment:
+        workarounds.append("Use the deepest pan you have, reduce the liquid, and simmer covered like a braise.")
+    return RecipeSuggestion(
+        title=candidate.title,
+        summary=candidate.summary,
+        ingredients=candidate.ingredients,
+        steps=candidate.steps,
+        required_equipment=candidate.required_equipment,
+        missing_ingredients=missing_ingredients,
+        missing_equipment=missing_equipment,
+        substitutions=[],
+        workarounds=workarounds,
+        can_make=not missing_ingredients and not missing_equipment,
     )
 
 

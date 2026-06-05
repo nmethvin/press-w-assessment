@@ -7,6 +7,7 @@ from langchain_core.tools import tool
 from app import storage
 from app.domain.profile import ProfileUpdate
 from app.domain.recipes import check_recipe_fit, search_recipes
+from app.domain.responses import RecipeCandidate, validate_recipe_candidate as validate_candidate
 
 
 @tool
@@ -71,6 +72,27 @@ def suggest_workarounds(recipe_id: str, user_id: str = "demo") -> dict:
 
 
 @tool
+def validate_recipe_candidate(
+    title: str,
+    ingredients: list[str],
+    required_equipment: list[str],
+    steps: list[str],
+    user_id: str = "demo",
+    summary: str = "",
+) -> dict:
+    """Validate an invented recipe candidate against the user's saved pantry and equipment before recommending it."""
+    profile = storage.get_profile(user_id)
+    candidate = RecipeCandidate(
+        title=title,
+        summary=summary,
+        ingredients=ingredients,
+        required_equipment=required_equipment,
+        steps=steps,
+    )
+    return validate_candidate(candidate, profile).model_dump()
+
+
+@tool
 def external_food_search(query: str) -> dict:
     """Search external sources for food/cooking references, especially authoritative safety guidance."""
     try:
@@ -110,5 +132,6 @@ TOOLS = [
     search_recipe_catalog,
     check_recipe_fit_for_user,
     suggest_workarounds,
+    validate_recipe_candidate,
     external_food_search,
 ]

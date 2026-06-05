@@ -2,9 +2,12 @@ from app.agent.graph import (
     enforce_recipe_fit_for_response,
     extract_markdown_section_items,
     remove_unsafe_allergen_claims,
+    structure_response_from_candidate_tool,
     structure_response_from_catalog_mentions,
 )
 from app.domain.profile import ProfileUpdate
+from app.domain.responses import RecipeCandidate, validate_recipe_candidate
+from app.storage import get_profile
 from app.storage import init_db, update_profile
 
 
@@ -158,3 +161,66 @@ def test_response_validator_flags_pizza_subsection_ingredients() -> None:
     assert "Tomato sauce" in corrected
     assert "Mixing bowl" in corrected
     assert any(item.get("validator") == "listed_requirements" for item in trace)
+
+
+def test_recipe_candidate_validation_flags_missing_pizza_base() -> None:
+    init_db()
+    user_id = "candidate-validator-test"
+    update_profile(
+        user_id,
+        ProfileUpdate(
+            pantry=[
+                "chicken",
+                "potatoes",
+                "carrots",
+                "olive oil",
+                "herbs",
+                "pasta",
+                "garlic",
+                "eggs",
+                "tomatoes",
+                "parmesan",
+                "pesto",
+                "chicken stock",
+            ],
+            equipment=["oven", "baking sheet", "knife"],
+            preferences=[],
+            allergies=[],
+        ),
+    )
+    candidate = RecipeCandidate(
+        title="Pesto Chicken Pizza",
+        summary="A pizza-style dinner using pesto, chicken, tomatoes, and parmesan.",
+        ingredients=["pizza base", "pesto", "chicken", "tomatoes", "parmesan", "olive oil", "herbs"],
+        required_equipment=["oven", "baking sheet", "knife"],
+        steps=["Spread pesto on the base.", "Add toppings.", "Bake until hot."],
+    )
+
+    suggestion = validate_recipe_candidate(candidate, get_profile(user_id))
+
+    assert suggestion.can_make is False
+    assert suggestion.missing_ingredients == ["pizza base"]
+    assert suggestion.missing_equipment == []
+
+
+def test_candidate_tool_result_becomes_structured_content() -> None:
+    suggestion = {
+        "title": "Pesto Chicken Pizza",
+        "summary": "A pizza-style dinner.",
+        "ingredients": ["pizza base", "pesto"],
+        "steps": ["Build it.", "Bake it."],
+        "required_equipment": ["oven"],
+        "missing_ingredients": ["pizza base"],
+        "missing_equipment": [],
+        "substitutions": [],
+        "workarounds": [],
+        "can_make": False,
+    }
+
+    content, trace = structure_response_from_candidate_tool(
+        [{"tool_result": "validate_recipe_candidate", "output": __import__("json").dumps(suggestion)}]
+    )
+
+    assert content is not None
+    assert content.recipes[0].missing_ingredients == ["pizza base"]
+    assert any(item.get("validator") == "structured_candidate" for item in trace)
