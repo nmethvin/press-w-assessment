@@ -41,7 +41,7 @@ def _load_model():
 class PantryPalAgent:
     def __init__(self) -> None:
         self.model = _load_model()
-        self.graph = create_react_agent(self.model, TOOLS, prompt=SYSTEM_PROMPT) if self.model else None
+        self.graph = create_react_agent(self.model, TOOLS, state_modifier=SYSTEM_PROMPT) if self.model else None
 
     def invoke(self, message: str, user_id: str, policy: str) -> Dict[str, Any]:
         refusal = refusal_for_policy(policy)
