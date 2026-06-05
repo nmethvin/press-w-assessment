@@ -12,6 +12,7 @@ const input = document.querySelector("#messageInput");
 const traceToggle = document.querySelector("#traceToggle");
 const activeRecipePanel = document.querySelector("#activeRecipePanel");
 const activeRecipeSidebar = document.querySelector("#activeRecipeSidebar");
+let currentActiveRecipe = null;
 
 function listFromField(value) {
   return value
@@ -190,6 +191,7 @@ function appendTrace(trace) {
 }
 
 function renderActiveRecipe(content) {
+  currentActiveRecipe = content || null;
   if (!content?.recipes?.length) {
     activeRecipePanel.innerHTML = "Recipe cards will pin here as you work.";
     activeRecipeSidebar.textContent = "No active recipe yet.";
@@ -269,6 +271,8 @@ form.addEventListener("submit", async (event) => {
       renderActiveRecipe(result.active_recipe);
     } else if (result.content?.recipes?.length) {
       renderActiveRecipe(result.content);
+    } else if (currentActiveRecipe) {
+      renderActiveRecipe(currentActiveRecipe);
     }
     appendTrace(result.trace);
     await loadProfile();
