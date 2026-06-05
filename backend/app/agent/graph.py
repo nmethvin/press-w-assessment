@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.prebuilt import create_react_agent
 
+from app import storage
 from app.agent.tools import TOOLS, check_recipe_fit_for_user, external_food_search, get_user_profile, search_recipe_catalog
 from app.domain.policy import ensure_allergen_notice, refusal_for_policy
+from app.domain.recipes import check_recipe_fit
 
 
 FAST_MODEL_ENV = "PANTRYPAL_FAST_MODEL"
@@ -155,8 +158,11 @@ class PantryPalAgent:
             messages: list[BaseMessage] = result["messages"]
             trace.extend(_extract_trace(messages))
             content = next((msg.content for msg in reversed(messages) if isinstance(msg, AIMessage)), "")
+            content = remove_unsafe_allergen_claims(str(content))
+            content, validation_trace = enforce_recipe_fit_for_response(content, user_id)
+            trace.extend(validation_trace)
             return {
-                "message": ensure_allergen_notice(str(content)),
+                "message": ensure_allergen_notice(content),
                 "trace": trace,
                 "policy": policy,
                 "model": routing["model"],
@@ -261,3 +267,50 @@ def _resolve_follow_up_query(message: str, recent_messages: List[Dict[str, str]]
         if item["role"] == "user":
             return f"{item['content']} {message}"
     return message
+
+
+def enforce_recipe_fit_for_response(content: str, user_id: str) -> tuple[str, List[Dict[str, Any]]]:
+    profile = storage.get_profile(user_id)
+    corrections: List[str] = []
+    trace: List[Dict[str, Any]] = []
+
+    for recipe in storage.list_recipes():
+        if recipe.name.lower() not in content.lower():
+            continue
+        fit = check_recipe_fit(recipe, profile.pantry, profile.equipment)
+        trace.append(
+            {
+                "validator": "recipe_fit",
+                "recipe_id": recipe.id,
+                "recipe_name": recipe.name,
+                "can_make": fit.can_make,
+                "missing_equipment": fit.missing_equipment,
+                "missing_ingredients": fit.missing_ingredients,
+            }
+        )
+        if fit.missing_equipment:
+            workaround = f" Workaround: {fit.workarounds[0]}" if fit.workarounds else ""
+            corrections.append(
+                f"- **{recipe.name}** requires {', '.join(fit.missing_equipment)}, which is not in your saved equipment.{workaround}"
+            )
+
+    if not corrections:
+        return content, trace
+
+    correction_text = (
+        "\n\n### Equipment check\n"
+        "I need to correct the fit check before you cook:\n"
+        + "\n".join(corrections)
+    )
+    return f"{content.rstrip()}{correction_text}", trace
+
+
+def remove_unsafe_allergen_claims(content: str) -> str:
+    patterns = [
+        r"[^.!?]*looks safe based on what you['’]ve shared[.!?]\s*",
+        r"[^.!?]*should be safe based on what you['’]ve shared[.!?]\s*",
+    ]
+    cleaned = content
+    for pattern in patterns:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+    return cleaned
