@@ -10,7 +10,7 @@ services:
       PANTRYPAL_FAST_MODEL: ${PANTRYPAL_FAST_MODEL:-gpt-4o-mini}
       PANTRYPAL_SMART_MODEL: ${PANTRYPAL_SMART_MODEL:-gpt-4o}
     volumes:
-      - pantrypal-data:/app/backend/data
+      - pantrypal-data:/app/data
 
 volumes:
   pantrypal-data:

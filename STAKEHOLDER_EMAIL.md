@@ -18,6 +18,10 @@ On latency, I do not think we should promise that every complete multi-tool answ
 
 For the build, I would demonstrate a LangGraph-based assistant with tool-driven recipe search, pantry/equipment fit checks, profile memory, external search for authoritative information, and a chat UI that can show user-friendly progress plus an engineer debug trace. I would keep the UI clean but simple and put most of the engineering weight behind correctness, observability, and guardrails.
 
+In the prototype, I would also make the active recipe a first-class workspace rather than just another chat message. The user should be able to generate a recipe, keep it pinned, ask questions like "how thin should I dice the tomatoes?" or "how will I know the chicken is done?", and have PantryPal answer against that recipe without losing context. Previous chats should be switchable, with each chat restoring its own recipe state, while household memory remains shared.
+
+One implementation lesson from the prototype is that keyword-only relevance checks are too narrow for cooking conversations. They are useful as a cheap first safety rail, but production should move scope classification to a small typed LLM call that sees the recent chat and active recipe context, while keeping deterministic overrides for medical and specific food-safety determinations.
+
 This gives us a V1 that is narrow enough to ship, differentiated enough to support the product thesis, and disciplined enough not to repeat the last incident.
 
 Best,

@@ -7,7 +7,8 @@ PantryPal should scale around a simple principle: the assistant can have persona
 The core technical strategy is to separate conversation from decision support:
 
 - Conversation layer: tone, follow-up questions, streaming, and natural chat.
-- Tool layer: recipe retrieval, pantry/equipment checks, substitutions, profile reads/writes, safety redirects, and external search.
+- Session layer: chat threads, active recipe state, structured conversation history, and profile-vs-session separation.
+- Tool layer: recipe retrieval, pantry/equipment checks, substitutions, profile reads/writes, safety redirects, typed response validation, and external search.
 - Policy layer: allergen notices, off-topic boundaries, medical/dietary refusal, food safety refusal, and memory rules.
 - Operations layer: evals, monitoring, incident response, CI/CD, prompt review, and cost telemetry.
 
@@ -33,6 +34,8 @@ Maya should lead the chat and profile UX. Chris can move fast on full-stack inte
 
 - Chat UI with streaming/progress states.
 - Household profile setup and editing for ingredients and equipment.
+- Chat thread switching and a new-chat flow, with the active recipe restored per thread.
+- Active recipe workspace beside chat so the user can ask technique questions without regenerating the whole recipe every turn.
 - User-friendly tool-status display and an engineer/debug mode.
 - Graceful workaround UX when a recipe does not fit.
 - Later: favorites, grocery export, meal planning flows, and voice UI exploration.
@@ -45,6 +48,7 @@ Sam should lead the LangGraph/tool orchestration work, but the process has to ch
 
 - LangGraph agent design and LangChain model integration.
 - Tool schema design for profile lookup, recipe search, fit checks, substitutions, and external search.
+- Pydantic response schemas for recipe candidates, recipe revisions, fit checks, and concise active-recipe updates.
 - Prompt and policy versioning.
 - Automated evals for equipment constraints, pantry constraints, medical advice refusal, food safety refusal, off-topic routing, and allergen notices.
 - Model routing and cost experiments.
@@ -69,6 +73,8 @@ The first sequence is not growth work; it is trust work.
 
 - Move pantry/equipment constraints out of the prompt and into structured profile data.
 - Build deterministic recipe-fit checks.
+- Store structured assistant payloads, not only rendered text, so prior chats preserve typed recipe cards and active recipe state.
+- Keep active recipes as per-chat state that remains in context until explicitly replaced or a fresh chat/page refresh starts a new session.
 - Add evals for the exact incident class: no oven means no oven recipes unless a valid workaround is offered.
 - Add prompt/tool review and rollback discipline.
 - Add observability for tool calls, model cost, latency, refusals, and constraint failures.
@@ -82,6 +88,8 @@ Once the core loop is testable, ship the household cooking assistant:
 - LangGraph agent with model-decided tool use.
 - Local structured recipe catalog plus ingestion path for externally discovered recipes.
 - Persistent household memory for ingredients and equipment.
+- Stored chat threads with per-thread active recipe state.
+- Typed recipe candidate/revision validation before display.
 - Session/profile support for preferences and allergies, with legal-approved disclosure behavior.
 - External search for authoritative food-safety/general cooking references.
 - Clean chat UI with visible progress within two seconds.
@@ -94,6 +102,7 @@ Before marketing drives Q3 volume, build the cost and reliability envelope:
 
 - Route simple classification and common cooking Q&A to cheaper/faster models.
 - Reserve stronger models for multi-step planning and ambiguous requests.
+- Replace brittle keyword relevance checks with a cheap typed LLM classifier that sees recent chat and active-recipe context; retain deterministic overrides for explicit medical and specific food-safety determinations.
 - Cache common substitutions, cooking facts, and safe redirects.
 - Keep deterministic checks outside the LLM.
 - Track blended cost per query, p95 latency, tool failure rate, and answer quality evals.
