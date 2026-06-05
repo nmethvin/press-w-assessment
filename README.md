@@ -23,7 +23,7 @@ The app is intentionally compact. FastAPI serves both the API and a vanilla chat
 ## Run locally
 
 ```bash
-cd /Users/nathanmethvin/Documents/projects/press-w-assessment
+cd press-w-assessment
 python -m venv .venv
 . .venv/bin/activate
 pip install -r backend/requirements.txt
