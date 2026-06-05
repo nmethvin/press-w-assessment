@@ -27,6 +27,7 @@ class AssistantContent(BaseModel):
     intro: str
     recipes: list[RecipeSuggestion] = Field(default_factory=list)
     safety_notes: list[str] = Field(default_factory=list)
+    follow_up_question: str = ""
     allergen_notice: str = ALLERGEN_NOTICE
 
 
@@ -86,6 +87,8 @@ def render_assistant_content(content: AssistantContent) -> str:
         parts.append(render_recipe_suggestion(recipe))
     if content.safety_notes:
         parts.append("### Notes\n" + "\n".join(f"- {note}" for note in content.safety_notes))
+    if content.follow_up_question:
+        parts.append("### Quick question\n" + content.follow_up_question)
     parts.append(content.allergen_notice)
     return "\n\n".join(part for part in parts if part)
 
@@ -112,3 +115,25 @@ def render_recipe_suggestion(recipe: RecipeSuggestion) -> str:
     if fit_notes:
         parts.append("#### Fit Check\n" + "\n".join(f"- {item}" for item in fit_notes))
     return "\n\n".join(parts)
+
+
+def add_fit_follow_up(content: AssistantContent) -> AssistantContent:
+    invalid_recipes = [recipe for recipe in content.recipes if not recipe.can_make]
+    if not invalid_recipes or content.follow_up_question:
+        return content
+    missing_ingredients = sorted({item for recipe in invalid_recipes for item in recipe.missing_ingredients})
+    missing_equipment = sorted({item for recipe in invalid_recipes for item in recipe.missing_equipment})
+    missing_parts = []
+    if missing_ingredients:
+        missing_parts.append("pantry items like " + ", ".join(missing_ingredients))
+    if missing_equipment:
+        missing_parts.append("equipment like " + ", ".join(missing_equipment))
+    missing_text = " and ".join(missing_parts)
+    if missing_text:
+        content.follow_up_question = (
+            f"Do you want to add {missing_text} to your kitchen, or should I suggest something similar "
+            "that fits what you already have?"
+        )
+    else:
+        content.follow_up_question = "Should I suggest something similar that fits what you already have?"
+    return content

@@ -215,6 +215,15 @@ button:hover {
   font-size: 13px;
 }
 
+.follow-up {
+  border: 1px solid #9fb3c8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 14px 0;
+  background: #f0f7ff;
+  color: var(--ink);
+}
+
 .message.user {
   align-self: flex-end;
   background: #e6fffb;

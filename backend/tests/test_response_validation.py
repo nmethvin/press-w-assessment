@@ -6,7 +6,7 @@ from app.agent.graph import (
     structure_response_from_catalog_mentions,
 )
 from app.domain.profile import ProfileUpdate
-from app.domain.responses import RecipeCandidate, validate_recipe_candidate
+from app.domain.responses import AssistantContent, RecipeCandidate, add_fit_follow_up, validate_recipe_candidate
 from app.storage import get_profile
 from app.storage import init_db, update_profile
 
@@ -223,4 +223,34 @@ def test_candidate_tool_result_becomes_structured_content() -> None:
 
     assert content is not None
     assert content.recipes[0].missing_ingredients == ["pizza base"]
+    assert "pizza base" in content.follow_up_question
     assert any(item.get("validator") == "structured_candidate" for item in trace)
+
+
+def test_invalid_fit_adds_follow_up_question() -> None:
+    init_db()
+    user_id = "follow-up-validator-test"
+    update_profile(
+        user_id,
+        ProfileUpdate(
+            pantry=["pesto"],
+            equipment=["oven"],
+            preferences=[],
+            allergies=[],
+        ),
+    )
+    candidate = RecipeCandidate(
+        title="Pesto Chicken Pizza",
+        ingredients=["pizza base", "pesto"],
+        required_equipment=["oven"],
+        steps=["Bake it."],
+    )
+    suggestion = validate_recipe_candidate(
+        candidate,
+        get_profile(user_id),
+    )
+
+    content = add_fit_follow_up(AssistantContent(intro="Checked it.", recipes=[suggestion]))
+
+    assert "pizza base" in content.follow_up_question
+    assert "suggest something similar" in content.follow_up_question

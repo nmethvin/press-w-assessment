@@ -130,6 +130,9 @@ function renderStructuredContent(content) {
   if (content.safety_notes?.length) {
     parts.push(`<h4>Notes</h4><ul>${content.safety_notes.map((note) => `<li>${formatInlineMarkdown(note)}</li>`).join("")}</ul>`);
   }
+  if (content.follow_up_question) {
+    parts.push(`<div class="follow-up"><strong>Quick question:</strong> ${formatInlineMarkdown(content.follow_up_question)}</div>`);
+  }
   if (content.allergen_notice) {
     parts.push(`<p class="allergen-note">${formatInlineMarkdown(content.allergen_notice)}</p>`);
   }

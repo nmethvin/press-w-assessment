@@ -15,6 +15,7 @@ from app.domain.responses import (
     AssistantContent,
     RecipeCandidate,
     RecipeSuggestion,
+    add_fit_follow_up,
     build_recipe_suggestion,
     render_assistant_content,
     validate_recipe_candidate,
@@ -190,6 +191,7 @@ class PantryPalAgent:
                 )
             trace.extend(structured_trace)
             if structured_content:
+                structured_content = add_fit_follow_up(structured_content)
                 rendered_content = render_assistant_content(structured_content)
                 content_payload = structured_content.model_dump()
             else:
@@ -316,6 +318,7 @@ class PantryPalAgent:
                 intro="Here is the best fit I found after checking your saved pantry and equipment.",
                 recipes=[build_recipe_suggestion(recipe, profile)],
             )
+            structured_content = add_fit_follow_up(structured_content)
             answer = render_assistant_content(structured_content)
 
         return {
@@ -439,7 +442,9 @@ def structure_response_from_catalog_mentions(content: str, user_id: str) -> tupl
     if not suggestions:
         return None, trace
     intro = "I checked those recipe ideas against your saved pantry and equipment."
-    return AssistantContent(response_type="options" if len(suggestions) > 1 else "recipe", intro=intro, recipes=suggestions), trace
+    return add_fit_follow_up(
+        AssistantContent(response_type="options" if len(suggestions) > 1 else "recipe", intro=intro, recipes=suggestions)
+    ), trace
 
 
 def structure_response_from_candidate_tool(trace: List[Dict[str, Any]]) -> tuple[Optional[AssistantContent], List[Dict[str, Any]]]:
@@ -468,7 +473,9 @@ def structure_response_from_candidate_tool(trace: List[Dict[str, Any]]) -> tuple
         intro = "I checked that idea against your saved pantry and equipment before recommending it."
     else:
         intro = "This recipe candidate fits your saved pantry and equipment."
-    return AssistantContent(response_type="options" if len(suggestions) > 1 else "recipe", intro=intro, recipes=suggestions), validator_trace
+    return add_fit_follow_up(
+        AssistantContent(response_type="options" if len(suggestions) > 1 else "recipe", intro=intro, recipes=suggestions)
+    ), validator_trace
 
 
 PANTRY_STAPLES = {"salt", "pepper", "water", "stock", "oil", "olive oil"}
