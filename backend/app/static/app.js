@@ -36,40 +36,68 @@ function formatInlineMarkdown(value) {
 }
 
 function renderMarkdown(content) {
-  const blocks = content.trim().split(/\n{2,}/);
   const html = [];
+  const lines = content.trim().split("\n");
+  let paragraph = [];
+  let list = null;
 
-  for (const block of blocks) {
-    const lines = block.split("\n").filter((line) => line.trim());
-    if (!lines.length) continue;
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    html.push(`<p>${paragraph.map(formatInlineMarkdown).join("<br>")}</p>`);
+    paragraph = [];
+  }
 
-    const heading = lines[0].match(/^(#{1,3})\s+(.+)$/);
-    if (heading && lines.length === 1) {
+  function flushList() {
+    if (!list) return;
+    html.push(`<${list.type}>${list.items.join("")}</${list.type}>`);
+    list = null;
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
       const level = heading[1].length + 2;
       html.push(`<h${level}>${formatInlineMarkdown(heading[2])}</h${level}>`);
       continue;
     }
 
-    if (lines.every((line) => /^[-*]\s+/.test(line.trim()))) {
-      html.push(
-        `<ul>${lines
-          .map((line) => `<li>${formatInlineMarkdown(line.trim().replace(/^[-*]\s+/, ""))}</li>`)
-          .join("")}</ul>`,
-      );
+    const unordered = line.match(/^[-*]\s+(.+)$/);
+    if (unordered) {
+      flushParagraph();
+      if (!list || list.type !== "ul") {
+        flushList();
+        list = { type: "ul", items: [] };
+      }
+      list.items.push(`<li>${formatInlineMarkdown(unordered[1])}</li>`);
       continue;
     }
 
-    if (lines.every((line) => /^\d+\.\s+/.test(line.trim()))) {
-      html.push(
-        `<ol>${lines
-          .map((line) => `<li>${formatInlineMarkdown(line.trim().replace(/^\d+\.\s+/, ""))}</li>`)
-          .join("")}</ol>`,
-      );
+    const ordered = line.match(/^\d+\.\s+(.+)$/);
+    if (ordered) {
+      flushParagraph();
+      if (!list || list.type !== "ol") {
+        flushList();
+        list = { type: "ol", items: [] };
+      }
+      list.items.push(`<li>${formatInlineMarkdown(ordered[1])}</li>`);
       continue;
     }
 
-    html.push(`<p>${lines.map(formatInlineMarkdown).join("<br>")}</p>`);
+    flushList();
+    paragraph.push(line);
   }
+
+  flushParagraph();
+  flushList();
 
   return html.join("");
 }
