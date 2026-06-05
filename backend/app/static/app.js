@@ -106,13 +106,71 @@ function appendMessage(content, role = "assistant") {
   const node = document.createElement("div");
   node.className = `message ${role}`;
   if (role === "assistant") {
-    node.innerHTML = renderMarkdown(content);
+    if (typeof content === "object" && content) {
+      node.innerHTML = renderStructuredContent(content);
+    } else {
+      node.innerHTML = renderMarkdown(content);
+    }
   } else {
     node.textContent = content;
   }
   messages.appendChild(node);
   messages.scrollTop = messages.scrollHeight;
   return node;
+}
+
+function renderStructuredContent(content) {
+  const parts = [];
+  if (content.intro) {
+    parts.push(`<p>${formatInlineMarkdown(content.intro)}</p>`);
+  }
+  for (const recipe of content.recipes || []) {
+    parts.push(renderRecipeCard(recipe));
+  }
+  if (content.safety_notes?.length) {
+    parts.push(`<h4>Notes</h4><ul>${content.safety_notes.map((note) => `<li>${formatInlineMarkdown(note)}</li>`).join("")}</ul>`);
+  }
+  if (content.allergen_notice) {
+    parts.push(`<p class="allergen-note">${formatInlineMarkdown(content.allergen_notice)}</p>`);
+  }
+  return parts.join("");
+}
+
+function renderRecipeCard(recipe) {
+  const fitItems = [];
+  if (recipe.missing_ingredients?.length) {
+    fitItems.push(`<li><strong>Missing pantry items:</strong> ${recipe.missing_ingredients.map(escapeHtml).join(", ")}</li>`);
+  }
+  if (recipe.missing_equipment?.length) {
+    fitItems.push(`<li><strong>Missing equipment:</strong> ${recipe.missing_equipment.map(escapeHtml).join(", ")}</li>`);
+  }
+  for (const workaround of recipe.workarounds || []) {
+    fitItems.push(`<li><strong>Workaround:</strong> ${formatInlineMarkdown(workaround)}</li>`);
+  }
+  for (const substitution of recipe.substitutions || []) {
+    fitItems.push(`<li><strong>Substitution:</strong> ${formatInlineMarkdown(substitution)}</li>`);
+  }
+
+  return `
+    <section class="recipe-card ${recipe.can_make ? "can-make" : "needs-work"}">
+      <h3>${formatInlineMarkdown(recipe.title)}</h3>
+      ${recipe.summary ? `<p>${formatInlineMarkdown(recipe.summary)}</p>` : ""}
+      ${renderList("Ingredients", recipe.ingredients)}
+      ${renderList("Required Equipment", recipe.required_equipment)}
+      ${renderOrderedList("Steps", recipe.steps)}
+      ${fitItems.length ? `<h4>Fit Check</h4><ul class="fit-list">${fitItems.join("")}</ul>` : `<p class="fit-ok">Fits your saved pantry and equipment.</p>`}
+    </section>
+  `;
+}
+
+function renderList(title, items) {
+  if (!items?.length) return "";
+  return `<h4>${escapeHtml(title)}</h4><ul>${items.map((item) => `<li>${formatInlineMarkdown(item)}</li>`).join("")}</ul>`;
+}
+
+function renderOrderedList(title, items) {
+  if (!items?.length) return "";
+  return `<h4>${escapeHtml(title)}</h4><ol>${items.map((item) => `<li>${formatInlineMarkdown(item)}</li>`).join("")}</ol>`;
 }
 
 function appendTrace(trace) {
@@ -166,7 +224,7 @@ form.addEventListener("submit", async (event) => {
     });
     const result = await response.json();
     status.textContent = `Policy: ${result.policy}. Mode: ${result.mode}. Model: ${result.model_tier} (${result.model}).`;
-    appendMessage(result.message, "assistant");
+    appendMessage(result.content || result.message, "assistant");
     appendTrace(result.trace);
     await loadProfile();
   } catch (error) {

@@ -11,6 +11,7 @@ from app import storage
 from app.agent.tools import TOOLS, check_recipe_fit_for_user, external_food_search, get_user_profile, search_recipe_catalog
 from app.domain.policy import ensure_allergen_notice, refusal_for_policy
 from app.domain.recipes import check_recipe_fit
+from app.domain.responses import AssistantContent, build_recipe_suggestion, render_assistant_content
 
 
 FAST_MODEL_ENV = "PANTRYPAL_FAST_MODEL"
@@ -125,6 +126,14 @@ class PantryPalAgent:
                     "I cannot tell you whether your specific food is safe to eat. When in doubt, throw it out. "
                     "For general guidance, check USDA FSIS or FoodSafety.gov for storage times, temperatures, and leftover handling."
                 ),
+                "content": AssistantContent(
+                    response_type="refusal",
+                    intro=(
+                        "I cannot tell you whether your specific food is safe to eat. When in doubt, throw it out. "
+                        "For general guidance, check USDA FSIS or FoodSafety.gov for storage times, temperatures, and leftover handling."
+                    ),
+                    safety_notes=[],
+                ).model_dump(),
                 "trace": trace,
                 "policy": policy,
                 "model": routing["model"],
@@ -133,8 +142,10 @@ class PantryPalAgent:
             }
 
         if refusal:
+            content = AssistantContent(response_type="refusal", intro=refusal, allergen_notice="")
             return {
                 "message": refusal,
+                "content": content.model_dump(),
                 "trace": trace,
                 "policy": policy,
                 "model": routing["model"],
@@ -159,10 +170,21 @@ class PantryPalAgent:
             trace.extend(_extract_trace(messages))
             content = next((msg.content for msg in reversed(messages) if isinstance(msg, AIMessage)), "")
             content = remove_unsafe_allergen_claims(str(content))
-            content, validation_trace = enforce_recipe_fit_for_response(content, user_id)
-            trace.extend(validation_trace)
+            structured_content, structured_trace = structure_response_from_catalog_mentions(content, user_id)
+            trace.extend(structured_trace)
+            if structured_content:
+                rendered_content = render_assistant_content(structured_content)
+                content_payload = structured_content.model_dump()
+            else:
+                rendered_content, validation_trace = enforce_recipe_fit_for_response(content, user_id)
+                trace.extend(validation_trace)
+                content_payload = AssistantContent(
+                    response_type="general",
+                    intro=rendered_content,
+                ).model_dump()
             return {
-                "message": ensure_allergen_notice(content),
+                "message": ensure_allergen_notice(rendered_content),
+                "content": content_payload,
                 "trace": trace,
                 "policy": policy,
                 "model": routing["model"],
@@ -191,8 +213,10 @@ class PantryPalAgent:
 
         if not recipes:
             answer = "I can help with that food question, but I do not have a strong recipe match in the demo catalog yet."
+            content = AssistantContent(response_type="general", intro=answer)
             return {
                 "message": answer,
+                "content": content.model_dump(),
                 "trace": trace,
                 "policy": policy,
                 "mode": "offline_fallback",
@@ -227,8 +251,23 @@ class PantryPalAgent:
                 f"{similar_text}{workaround_text} I can help adapt it instead of leaving you with a dead end."
             )
 
+        recipe = storage.get_recipe(chosen["id"])
+        structured_content = None
+        if recipe:
+            profile = storage.get_profile(user_id)
+            structured_content = AssistantContent(
+                response_type="recipe",
+                intro="Here is the best fit I found after checking your saved pantry and equipment.",
+                recipes=[build_recipe_suggestion(recipe, profile)],
+            )
+            answer = render_assistant_content(structured_content)
+
         return {
             "message": ensure_allergen_notice(answer),
+            "content": structured_content.model_dump() if structured_content else AssistantContent(
+                response_type="general",
+                intro=answer,
+            ).model_dump(),
             "trace": trace,
             "policy": policy,
             "mode": "offline_fallback",
@@ -273,10 +312,12 @@ def enforce_recipe_fit_for_response(content: str, user_id: str) -> tuple[str, Li
     profile = storage.get_profile(user_id)
     corrections: List[str] = []
     trace: List[Dict[str, Any]] = []
+    mentioned_catalog_recipe = False
 
     for recipe in storage.list_recipes():
         if recipe.name.lower() not in content.lower():
             continue
+        mentioned_catalog_recipe = True
         fit = check_recipe_fit(recipe, profile.pantry, profile.equipment)
         trace.append(
             {
@@ -293,16 +334,197 @@ def enforce_recipe_fit_for_response(content: str, user_id: str) -> tuple[str, Li
             corrections.append(
                 f"- **{recipe.name}** requires {', '.join(fit.missing_equipment)}, which is not in your saved equipment.{workaround}"
             )
+        if fit.missing_ingredients:
+            substitutions = (
+                " Substitutions: "
+                + "; ".join(f"{ingredient}: {substitute}" for ingredient, substitute in fit.substitutions.items())
+                if fit.substitutions
+                else ""
+            )
+            corrections.append(
+                f"- **{recipe.name}** is missing ingredients from your saved pantry: {', '.join(fit.missing_ingredients)}.{substitutions}"
+            )
+
+    if not mentioned_catalog_recipe:
+        generic_correction, generic_trace = validate_listed_requirements(content, profile.pantry, profile.equipment)
+        trace.extend(generic_trace)
+        corrections.extend(generic_correction)
 
     if not corrections:
         return content, trace
 
     correction_text = (
-        "\n\n### Equipment check\n"
+        "\n\n### Fit check\n"
         "I need to correct the fit check before you cook:\n"
         + "\n".join(corrections)
     )
     return f"{content.rstrip()}{correction_text}", trace
+
+
+def structure_response_from_catalog_mentions(content: str, user_id: str) -> tuple[Optional[AssistantContent], List[Dict[str, Any]]]:
+    profile = storage.get_profile(user_id)
+    suggestions = []
+    trace: List[Dict[str, Any]] = []
+    for recipe in storage.list_recipes():
+        if recipe.name.lower() not in content.lower():
+            continue
+        suggestion = build_recipe_suggestion(recipe, profile)
+        suggestions.append(suggestion)
+        trace.append(
+            {
+                "validator": "structured_recipe",
+                "recipe_id": recipe.id,
+                "recipe_name": recipe.name,
+                "can_make": suggestion.can_make,
+                "missing_equipment": suggestion.missing_equipment,
+                "missing_ingredients": suggestion.missing_ingredients,
+            }
+        )
+    if not suggestions:
+        return None, trace
+    intro = "I checked those recipe ideas against your saved pantry and equipment."
+    return AssistantContent(response_type="options" if len(suggestions) > 1 else "recipe", intro=intro, recipes=suggestions), trace
+
+
+PANTRY_STAPLES = {"salt", "pepper", "water", "stock", "oil", "olive oil"}
+EQUIPMENT_EQUIVALENTS = {
+    "baking sheet": {"sheet pan"},
+    "pizza stone": {"sheet pan", "baking sheet"},
+    "pizza cutter": {"knife"},
+    "rolling pin": set(),
+}
+
+
+def validate_listed_requirements(
+    content: str,
+    pantry: List[str],
+    equipment: List[str],
+) -> tuple[List[str], List[Dict[str, Any]]]:
+    listed_ingredients = extract_markdown_section_items(
+        content,
+        {"ingredients", "ingredient", "pizza dough", "dough", "toppings"},
+    )
+    listed_equipment = extract_markdown_section_items(content, {"equipment", "equipment needed", "required equipment"})
+    pantry_set = {item.lower() for item in pantry}
+    equipment_set = {item.lower() for item in equipment}
+
+    missing_ingredients = [
+        item for item in listed_ingredients if item.lower() not in pantry_set and item.lower() not in PANTRY_STAPLES
+    ]
+    missing_equipment = [item for item in listed_equipment if not has_equipment(item, equipment_set)]
+
+    corrections: List[str] = []
+    trace: List[Dict[str, Any]] = []
+    if listed_ingredients or listed_equipment:
+        trace.append(
+            {
+                "validator": "listed_requirements",
+                "listed_ingredients": listed_ingredients,
+                "listed_equipment": listed_equipment,
+                "missing_ingredients": missing_ingredients,
+                "missing_equipment": missing_equipment,
+            }
+        )
+    if missing_ingredients:
+        corrections.append(
+            "- The suggested recipe lists ingredients missing from your saved pantry: "
+            + ", ".join(missing_ingredients)
+            + "."
+        )
+    if missing_equipment:
+        corrections.append(
+            "- The suggested recipe lists equipment missing from your saved kitchen: "
+            + ", ".join(missing_equipment)
+            + "."
+        )
+    return corrections, trace
+
+
+def has_equipment(item: str, equipment_set: set[str]) -> bool:
+    normalized = item.lower()
+    if normalized in equipment_set:
+        return True
+    equivalents = EQUIPMENT_EQUIVALENTS.get(normalized, set())
+    return bool(equivalents & equipment_set)
+
+
+def extract_markdown_section_items(content: str, headings: set[str]) -> List[str]:
+    items: List[str] = []
+    in_section = False
+    section_has_items = False
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if in_section and section_has_items:
+                in_section = False
+                section_has_items = False
+            continue
+        heading_text = re.sub(r"^#{1,4}\s*", "", line).rstrip(":").strip().lower()
+        if heading_matches(heading_text, headings):
+            in_section = True
+            section_has_items = False
+            inline = line.split(":", 1)
+            if len(inline) == 2 and inline[1].strip():
+                items.extend(split_inline_items(inline[1]))
+                section_has_items = True
+            continue
+        if in_section and re.match(r"^(#{1,4}\s*)?[A-Za-z][A-Za-z ]+:", line):
+            candidate_heading = re.sub(r"^#{1,4}\s*", "", line).split(":", 1)[0].strip().lower()
+            if not heading_matches(candidate_heading, headings):
+                in_section = False
+                section_has_items = False
+                continue
+        if in_section and re.match(r"^(#{1,4}\s*)?(steps|instructions|tips|substitutions|required equipment|equipment needed|equipment)\b", line, re.IGNORECASE):
+            next_heading = re.sub(r"^#{1,4}\s*", "", line).split(":", 1)[0].strip().lower()
+            in_section = heading_matches(next_heading, headings)
+            section_has_items = False
+            if not in_section:
+                continue
+        if in_section:
+            item = parse_requirement_line(line)
+            if item:
+                items.append(item)
+                section_has_items = True
+    return dedupe_preserving_order(items)
+
+
+def heading_matches(heading_text: str, headings: set[str]) -> bool:
+    if heading_text in headings:
+        return True
+    if "ingredients" in headings and "ingredients" in heading_text:
+        return True
+    if "equipment" in headings and "equipment" in heading_text:
+        return True
+    return False
+
+
+def split_inline_items(value: str) -> List[str]:
+    return [clean_requirement_item(item) for item in re.split(r",|;", value) if clean_requirement_item(item)]
+
+
+def parse_requirement_line(line: str) -> Optional[str]:
+    stripped = re.sub(r"^[-*]\s*", "", line)
+    stripped = re.sub(r"^\d+\.\s*", "", stripped)
+    return clean_requirement_item(stripped)
+
+
+def clean_requirement_item(item: str) -> str:
+    item = re.sub(r"\*\*", "", item)
+    item = item.split("(", 1)[0]
+    item = item.split(":", 1)[0]
+    item = re.sub(r"\b(optional|store-bought|homemade|fresh|sliced|canned)\b", "", item, flags=re.IGNORECASE)
+    return " ".join(item.strip(" -.,").split())
+
+
+def dedupe_preserving_order(items: List[str]) -> List[str]:
+    seen = set()
+    deduped: List[str] = []
+    for item in items:
+        key = item.lower()
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    return deduped
 
 
 def remove_unsafe_allergen_claims(content: str) -> str:

@@ -54,6 +54,12 @@ FOOD_SCOPE_TERMS = {
     "fish",
     "vegetables",
     "vegetable",
+    "pizza",
+    "dough",
+    "sauce",
+    "mozzarella",
+    "basil",
+    "toppings",
 }
 
 MEDICAL_TERMS = {

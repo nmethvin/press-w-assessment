@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +22,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     message: str
+    content: Optional[Dict[str, Any]] = None
     policy: str
     trace: List[Dict[str, Any]]
     mode: str = "langgraph"
@@ -76,6 +77,7 @@ def chat(request: ChatRequest) -> ChatResponse:
     storage.add_conversation_message(request.user_id, "assistant", message)
     return ChatResponse(
         message=message,
+        content=result.get("content"),
         policy=result.get("policy", policy),
         trace=result.get("trace", []),
         mode=result.get("mode", "langgraph"),

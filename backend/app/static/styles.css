@@ -184,6 +184,37 @@ button:hover {
   margin-top: 5px;
 }
 
+.recipe-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  margin: 14px 0;
+  background: #fbfdff;
+}
+
+.recipe-card.needs-work {
+  border-color: #f0b429;
+  background: #fffaf0;
+}
+
+.recipe-card.can-make {
+  border-color: #8bd3bd;
+}
+
+.fit-list {
+  color: var(--warning);
+}
+
+.fit-ok {
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+.allergen-note {
+  color: var(--warning);
+  font-size: 13px;
+}
+
 .message.user {
   align-self: flex-end;
   background: #e6fffb;
