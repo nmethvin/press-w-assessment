@@ -71,6 +71,12 @@ def get_active_recipe(user_id: str) -> Dict[str, Any]:
     return {"active_recipe": storage.get_active_recipe(user_id)}
 
 
+@app.post("/api/session/{user_id}/reset")
+def reset_session(user_id: str) -> Dict[str, str]:
+    storage.reset_session(user_id)
+    return {"status": "reset"}
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
     recent_messages = storage.get_recent_conversation(request.user_id)

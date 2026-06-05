@@ -159,6 +159,12 @@ def get_recent_conversation(user_id: str, limit: int = 8) -> list[dict[str, str]
     return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
 
 
+def clear_conversation(user_id: str) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM conversation_messages WHERE user_id = ?", (user_id,))
+        conn.commit()
+
+
 def save_active_recipe(user_id: str, payload: dict) -> dict:
     with connect() as conn:
         conn.execute(
@@ -179,3 +185,14 @@ def get_active_recipe(user_id: str) -> Optional[dict]:
     with connect() as conn:
         row = conn.execute("SELECT payload FROM active_recipes WHERE user_id = ?", (user_id,)).fetchone()
     return json.loads(row["payload"]) if row else None
+
+
+def clear_active_recipe(user_id: str) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM active_recipes WHERE user_id = ?", (user_id,))
+        conn.commit()
+
+
+def reset_session(user_id: str) -> None:
+    clear_conversation(user_id)
+    clear_active_recipe(user_id)

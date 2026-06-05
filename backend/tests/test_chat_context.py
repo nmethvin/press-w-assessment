@@ -24,3 +24,19 @@ def test_chat_endpoint_returns_active_recipe() -> None:
 
     assert response["active_recipe"] is not None
     assert active["recipes"][0]["title"] == "Chicken Potato Stew"
+
+
+def test_session_reset_clears_chat_and_active_recipe() -> None:
+    user_id = "reset-session-test"
+    client = TestClient(app)
+
+    client.post("/api/chat", json={"user_id": user_id, "message": "suggest chicken potato stew"})
+    assert client.get(f"/api/active-recipe/{user_id}").json()["active_recipe"] is not None
+
+    reset = client.post(f"/api/session/{user_id}/reset").json()
+    active = client.get(f"/api/active-recipe/{user_id}").json()["active_recipe"]
+    follow_up = client.post("/api/chat", json={"user_id": user_id, "message": "suggest one"}).json()
+
+    assert reset == {"status": "reset"}
+    assert active is None
+    assert follow_up["policy"] == "off_topic"

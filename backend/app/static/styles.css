@@ -19,12 +19,15 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--page);
   color: var(--ink);
+  overflow: hidden;
 }
 
 .app-shell {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .profile-panel {
@@ -34,26 +37,33 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .chat-panel {
   min-width: 0;
+  min-height: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
   background: var(--panel);
+  overflow: hidden;
 }
 
 .workbench {
   min-width: 0;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
   background: var(--panel);
+  overflow: hidden;
 }
 
 .recipe-panel {
   border-left: 1px solid var(--line);
   background: #f8fafc;
   padding: 24px;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -185,6 +195,7 @@ button:hover {
 
 .messages {
   overflow: auto;
+  min-height: 0;
   padding: 28px 32px;
   display: flex;
   flex-direction: column;
@@ -310,12 +321,28 @@ button:hover {
 }
 
 @media (max-width: 820px) {
+  body {
+    overflow: auto;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   .workbench {
     grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .chat-panel {
+    min-height: 70vh;
+  }
+
+  .messages {
+    max-height: 60vh;
   }
 
   .recipe-panel {

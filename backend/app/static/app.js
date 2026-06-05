@@ -215,6 +215,12 @@ async function loadActiveRecipe() {
   renderActiveRecipe(payload.active_recipe);
 }
 
+async function resetSession() {
+  await fetch(`/api/session/${userId}/reset`, { method: "POST" });
+  messages.innerHTML = "";
+  renderActiveRecipe(null);
+}
+
 document.querySelectorAll(".tab-button").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
@@ -268,9 +274,13 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-appendMessage(
-  "Tell me what you have, or ask for a dinner idea. I will check your pantry and equipment before I get bossy.",
-  "assistant",
-);
-loadProfile();
-loadActiveRecipe();
+async function initializeApp() {
+  await resetSession();
+  await loadProfile();
+  appendMessage(
+    "Tell me what you have, or ask for a dinner idea. I will check your pantry and equipment before I get bossy.",
+    "assistant",
+  );
+}
+
+initializeApp();
